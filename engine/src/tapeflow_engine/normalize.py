@@ -33,6 +33,20 @@ def _title(tags):
     return p[:cut].rstrip(_SEP)
 
 
+def _tc_frames(tc, fps):
+    """Tape TC 'HH:MM:SS:FF' (or ';' drop-frame separators) -> absolute frame number — for relative
+    layout only. Non-drop arithmetic (exact for PAL; the small label drift on NTSC drop-frame is
+    immaterial since the UI labels with the raw tc string)."""
+    if not tc:
+        return 0
+    try:
+        h, m, s, f = (int(x) for x in tc.replace(";", ":").split(":"))
+    except ValueError:
+        return 0
+    r = int(round(fps or 25))
+    return ((h * 60 + m) * 60 + s) * r + f
+
+
 # ---------- HDV (hdvmerge.analysis/1) ----------
 
 def _hdv_damage(hdv, fps):
@@ -139,4 +153,76 @@ def from_hdvmerge(hdv, working_dir, files_by_tag):
         "segments": _hdv_segments(segs, hdv["total_frames"]),
         "damage": damage,
         "divergences": hdv["divergences"],
+    }
+
+
+# ---------- DV (dvmerge.analysis/1) ----------
+
+def _dv_damage(dv, fps):
+    """dvmerge re-capture spans -> the unified damage list. A span that is purely ``missing`` (no
+    capture has it) maps to ``missing``; anything with damaged-but-present frames (mosaic, or
+    mosaic+missing) maps to ``dirty`` — there are copies to improve on."""
+    files = dv["files"]
+    out = []
+    for i, sp in enumerate(dv["spans"]):
+        cover = [files[j] for j in sp["cover"] if j < len(files)]
+        sev = sp["kind"]
+        if sp.get("bmax"):
+            sev += " · max %d blk" % sp["bmax"]
+        out.append({
+            "id": "s%d" % i,
+            "kind": "missing" if sp["kind"] == "missing" else "dirty",
+            "axis": [_tc_frames(sp["tc0"], fps), _tc_frames(sp["tc1"], fps)],
+            "tcStart": sp["tc0"], "tcEnd": sp["tc1"],
+            "recStart": sp["rdt0"], "recEnd": sp["rdt1"],
+            "durationFrames": sp["length"],
+            "coverage": cover,
+            "copies": len(cover),
+            "severity": sev,
+        })
+    return out
+
+
+def _dv_capture(src, files_by_tag, fps):
+    tag = src["tag"]
+    if not src.get("aligned"):
+        return {"tag": tag, "file": files_by_tag.get(tag, tag), "axis": [0, 0],
+                "tcSpan": [None, None], "recSpan": [None, None], "health": []}
+    return {
+        "tag": tag,
+        "file": files_by_tag.get(tag, tag),
+        "axis": [_tc_frames(src["tc0"], fps), _tc_frames(src["tc1"], fps)],
+        "tcSpan": [src["tc0"], src["tc1"]],
+        "recSpan": [src["rdt0"], src["rdt1"]],
+        "health": [],
+    }
+
+
+def from_dvmerge(dv, working_dir, files_by_tag):
+    """``dvmerge.analysis/1`` dict -> ``tapeflow.analysis/1`` dict. DV has no segment chain (dvrescue
+    merges frame-by-frame), so ``segments`` is empty; the tape-map lanes come from ``captures``."""
+    fps = dv["fps"]
+    damage = _dv_damage(dv, fps)
+    return {
+        "schema": SCHEMA,
+        "format": "dv",
+        "dir": working_dir,
+        "fps": fps,
+        "complete": dv["complete"],
+        "buildable": True,   # dvrescue always writes a valid DV stream; there is no seam concept
+        "tape": {
+            "tcStart": dv["tc0"], "tcEnd": dv["tc1"],
+            "recStart": dv["rdt0"], "recEnd": dv["rdt1"],
+            "durationFrames": dv["total_frames"],
+            "title": _title(dv["files"]),
+        },
+        "summary": {
+            "recaptureSpots": len(damage),
+            "missingFrames": dv["miss"],
+            "unusedCaptures": sum(1 for s in dv["sources"] if not s.get("aligned")),
+        },
+        "captures": [_dv_capture(s, files_by_tag, fps) for s in dv["sources"]],
+        "segments": [],
+        "damage": damage,
+        "divergences": [],
     }

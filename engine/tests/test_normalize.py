@@ -103,5 +103,67 @@ class TestNormalizeHdv(unittest.TestCase):
         self.assertEqual(d["summary"]["unusedCaptures"], 1)
 
 
+def _span(kind="mosaic", cover=(0,), miss=0, dmg=1, bmax=7):
+    return {"tf0": 250, "tf1": 250, "length": 1, "tc0": "00:00:10:00", "tc1": "00:00:10:00",
+            "rdt0": "2010-01-01 08:00:10", "rdt1": "2010-01-01 08:00:10",
+            "kind": kind, "dmg": dmg, "miss": miss, "bmax": bmax, "cover": list(cover)}
+
+
+def _dv(spans=(), miss=0, complete=True, unaligned=False):
+    return {
+        "schema": "dvmerge.analysis/1", "version": "0.1.0", "fps": 25.0,
+        "total_frames": 1000, "tc0": "00:00:00:00", "tc1": "00:00:40:00",
+        "rdt0": "2010-01-01 08:00:00", "rdt1": "2010-01-01 08:00:40",
+        "clean": 1000 - miss, "dmg": 0, "miss": miss, "lost_frames": miss,
+        "complete": complete, "files": ["A-1", "A-2"],
+        "spans": list(spans),
+        "sources": [
+            {"tag": "A-1", "aligned": True, "tc0": "00:00:00:00", "tc1": "00:00:30:00",
+             "rdt0": "2010-01-01 08:00:00", "rdt1": "2010-01-01 08:00:30"},
+            {"tag": "A-2", "aligned": False} if unaligned else
+            {"tag": "A-2", "aligned": True, "tc0": "00:00:10:00", "tc1": "00:00:40:00",
+             "rdt0": "2010-01-01 08:00:10", "rdt1": "2010-01-01 08:00:40"}],
+    }
+
+
+class TestNormalizeDv(unittest.TestCase):
+    def test_clean_tape_is_complete_and_serializable(self):
+        d = normalize.from_dvmerge(_dv(), "/work", {"A-1": "A-1.dv", "A-2": "A-2.dv"})
+        self.assertEqual(json.loads(json.dumps(d)), d)
+        self.assertEqual(d["schema"], "tapeflow.analysis/1")
+        self.assertEqual(d["format"], "dv")
+        self.assertTrue(d["complete"])
+        self.assertTrue(d["buildable"])
+        self.assertEqual(d["segments"], [])              # DV has no segment chain
+        self.assertEqual(d["damage"], [])
+        self.assertEqual(d["tape"]["tcEnd"], "00:00:40:00")
+        self.assertEqual([c["tag"] for c in d["captures"]], ["A-1", "A-2"])
+        self.assertEqual(d["captures"][0]["file"], "A-1.dv")
+
+    def test_mosaic_span_is_dirty_with_coverage(self):
+        d = normalize.from_dvmerge(_dv(spans=[_span("mosaic", cover=(0,))], complete=False),
+                                   "/work", {})
+        self.assertEqual(len(d["damage"]), 1)
+        spot = d["damage"][0]
+        self.assertEqual(spot["kind"], "dirty")
+        self.assertEqual(spot["coverage"], ["A-1"])
+        self.assertEqual(spot["copies"], 1)
+        self.assertIn("mosaic", spot["severity"])
+
+    def test_missing_span_is_missing_with_no_coverage(self):
+        d = normalize.from_dvmerge(
+            _dv(spans=[_span("missing", cover=(), miss=5, dmg=0, bmax=0)], miss=5, complete=False),
+            "/work", {})
+        spot = d["damage"][0]
+        self.assertEqual(spot["kind"], "missing")
+        self.assertEqual(spot["coverage"], [])
+        self.assertEqual(spot["copies"], 0)
+        self.assertEqual(d["summary"]["missingFrames"], 5)
+
+    def test_unaligned_source_counted(self):
+        d = normalize.from_dvmerge(_dv(unaligned=True, complete=False), "/work", {})
+        self.assertEqual(d["summary"]["unusedCaptures"], 1)
+
+
 if __name__ == "__main__":
     unittest.main()

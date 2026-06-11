@@ -6,6 +6,7 @@ caches live under ``<dir>/.tapeflow/`` so the working dir stays clean.
 """
 
 import os
+import shutil
 
 from . import _bootstrap, normalize
 
@@ -40,7 +41,7 @@ def analyze(params, notify=None):
     if hdv:
         return _analyze_hdv(directory, hdv, notify)
     if dv:
-        raise ValueError("DV analysis is not wired yet (needs dvrescue); HDV works")
+        return _analyze_dv(directory, dv, notify)
     raise ValueError("no capture files found in %s" % directory)
 
 
@@ -65,3 +66,21 @@ def _analyze_hdv(directory, files, notify):
     hdv = hjson.analysis(rep, plan)
     files_by_tag = {os.path.splitext(os.path.basename(p))[0]: os.path.basename(p) for p in files}
     return normalize.from_hdvmerge(hdv, directory, files_by_tag)
+
+
+def _analyze_dv(directory, files, notify):
+    _bootstrap.ensure_engines_importable()
+    if not shutil.which("dvrescue"):
+        raise ValueError("DV needs the dvrescue binary on PATH "
+                         "(install MediaArea/MIPoPS dvrescue)")
+    from dvmerge import run as dvrun, jsonout as dvjson
+
+    cache_dir = os.path.join(directory, ".tapeflow", "dvmerge")
+    if notify:
+        # dvrescue runs as one subprocess with no incremental progress; signal the long step.
+        notify("progress", {"phase": "merging", "tool": "dvrescue"})
+    # fps defaults to PAL 25 (dvmerge's default); NTSC (29.97) will need a per-tape setting later.
+    plan = dvrun.analyze(files, cache_dir=cache_dir)
+    dv = dvjson.analysis(plan)
+    files_by_tag = {os.path.splitext(os.path.basename(p))[0]: os.path.basename(p) for p in files}
+    return normalize.from_dvmerge(dv, directory, files_by_tag)
