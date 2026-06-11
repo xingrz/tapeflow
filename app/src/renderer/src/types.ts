@@ -78,4 +78,35 @@ export interface Progress {
   total?: number
   file?: string
   cached?: boolean
+  tool?: string
+}
+
+export interface BuildVerify {
+  aux: boolean
+  recHead: string | null
+  tcHead: string | null
+  recTail: string | null
+  tcTail: string | null
+  ccOk: boolean
+  cc: number
+  expectedCc: number
+  tei: number
+  expectedTei: number
+  decodeErrors: number | null
+  unexplainedDecode: number | null
+  decodeGate: boolean | null
+}
+
+export interface BuildResult {
+  output: string
+  format: 'hdv' | 'dv'
+  ok: boolean
+  sizeBytes: number
+  verify: BuildVerify | null // HDV self-check; null for DV (the merge is dvrescue's)
+}
+
+export interface Thumbnail {
+  file: string
+  seconds: number
+  dataUrl: string // a PNG data: URL
 }

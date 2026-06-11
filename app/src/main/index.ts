@@ -1,5 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain } from 'electron'
-import { join, resolve } from 'node:path'
+import { copyFile } from 'node:fs/promises'
+import { basename, join, resolve } from 'node:path'
 import { Sidecar } from './sidecar'
 
 let win: BrowserWindow | null = null
@@ -35,14 +36,35 @@ function createWindow(): void {
 app.whenReady().then(() => {
   startSidecar()
 
+  const onProgress = (p: unknown) => win?.webContents.send('progress', p)
+
   ipcMain.handle('pickDir', async () => {
     const r = await dialog.showOpenDialog(win!, { properties: ['openDirectory'] })
     return r.canceled ? null : r.filePaths[0]
   })
+  ipcMain.handle('pickSave', async (_e, defaultName?: string) => {
+    const r = await dialog.showSaveDialog(win!, { defaultPath: defaultName })
+    return r.canceled ? null : (r.filePath ?? null)
+  })
   ipcMain.handle('capabilities', () => sidecar!.call('capabilities'))
-  ipcMain.handle('analyze', (_e, dir: string) =>
-    sidecar!.call('analyze', { dir }, (p) => win?.webContents.send('progress', p))
+  ipcMain.handle('analyze', (_e, dir: string) => sidecar!.call('analyze', { dir }, onProgress))
+  ipcMain.handle('build', (_e, dir: string, output: string) =>
+    sidecar!.call('build', { dir, output }, onProgress)
   )
+  ipcMain.handle('thumbnail', (_e, dir: string, file: string, seconds: number) =>
+    sidecar!.call('thumbnail', { dir, file, seconds })
+  )
+  // Drag-drop ingest: copy dropped capture files into the working dir (Node fs, in main), so the
+  // renderer can then re-analyze. Returns the copied basenames.
+  ipcMain.handle('ingest', async (_e, dir: string, srcPaths: string[]) => {
+    const copied: string[] = []
+    for (const src of srcPaths) {
+      const name = basename(src)
+      await copyFile(src, join(dir, name))
+      copied.push(name)
+    }
+    return copied
+  })
 
   createWindow()
   app.on('activate', () => {

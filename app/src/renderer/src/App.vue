@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue'
-import type { Capabilities, Progress, TapeAnalysis } from './types'
+import type { BuildResult, Capabilities, Progress, TapeAnalysis } from './types'
 
 // NOTE: deliberately plain ("ugly-first"). The job here is correct data binding to
 // tapeflow.analysis/1; the Canvas tape-map and visual polish are the follow-up (see AGENTS.md).
@@ -11,6 +11,7 @@ const analysis = ref<TapeAnalysis | null>(null)
 const progress = ref<string>('')
 const error = ref<string>('')
 const busy = ref(false)
+const buildResult = ref<BuildResult | null>(null)
 
 let unsub: (() => void) | null = null
 
@@ -46,12 +47,33 @@ async function analyze() {
   if (!dir.value || busy.value) return
   busy.value = true
   error.value = ''
+  buildResult.value = null
   progress.value = 'starting…'
   try {
     analysis.value = await window.api.analyze(dir.value)
   } catch (e) {
     error.value = String(e)
     analysis.value = null
+  } finally {
+    busy.value = false
+    progress.value = ''
+  }
+}
+
+// Minimal export — proves the build wiring end-to-end. The UI agent will redesign this.
+async function exportMerged() {
+  if (!analysis.value || !dir.value || busy.value) return
+  const ext = analysis.value.format === 'hdv' ? '.m2t' : '.dv'
+  const out = await window.api.pickSave((analysis.value.tape.title || 'merged') + ext)
+  if (!out) return
+  busy.value = true
+  error.value = ''
+  buildResult.value = null
+  progress.value = 'exporting…'
+  try {
+    buildResult.value = await window.api.build(dir.value, out)
+  } catch (e) {
+    error.value = String(e)
   } finally {
     busy.value = false
     progress.value = ''
@@ -82,8 +104,20 @@ function dur(frames: number, fps: number): string {
     <section class="bar">
       <button @click="pickDir" :disabled="busy">Choose working directory…</button>
       <button @click="analyze" :disabled="!dir || busy">Re-analyse</button>
+      <button @click="exportMerged" :disabled="!analysis || !analysis.buildable || busy">
+        Export merged…
+      </button>
       <span class="dir" v-if="dir">{{ dir }}</span>
       <span class="progress" v-if="busy">{{ progress }}</span>
+    </section>
+
+    <section class="build" v-if="buildResult" :class="buildResult.ok ? 'ok' : 'warn'">
+      {{ buildResult.ok ? '✅' : '⚠' }} Exported
+      {{ (buildResult.sizeBytes / 1e9).toFixed(2) }} GB → {{ buildResult.output }}
+      <template v-if="buildResult.verify">
+        · AUX {{ buildResult.verify.aux ? 'OK' : 'MISSING' }} · CC/TEI
+        {{ buildResult.verify.ccOk ? 'OK' : 'FAIL' }}
+      </template>
     </section>
 
     <p class="error" v-if="error">{{ error }}</p>
@@ -235,6 +269,21 @@ button:disabled {
   color: #1d7a3a;
 }
 .verdict.warn {
+  background: #fdf2e2;
+  color: #9a6400;
+}
+.build {
+  margin: 10px 0;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  word-break: break-all;
+}
+.build.ok {
+  background: #e7f7ec;
+  color: #1d7a3a;
+}
+.build.warn {
   background: #fdf2e2;
   color: #9a6400;
 }
