@@ -64,11 +64,13 @@ these external binaries on PATH:
 
 ## Status
 
-Early. A working **vertical slice** is in place for **both HDV and DV**: pick a working directory →
-the Python sidecar analyses it (HDV via hdvmerge, DV via dvmerge→dvrescue) → the app shows the
-completeness verdict, the re-capture list, and the captures (deliberately plain for now). Run it in
-dev with `cd app && npm install && npm run dev` (needs `python3` on PATH, plus `dvrescue` for DV;
+Early, but the **backend is contract-complete for both HDV and DV**: pick a working directory → the
+Python sidecar analyses it (HDV via hdvmerge, DV via dvmerge→dvrescue), can **export** the merged
+file, and serves **damage-frame thumbnails** — all over JSON-RPC, brokered to a typed `window.api`.
+The Vue UI is a deliberately plain placeholder (verdict + lists + a minimal export button). Run it
+in dev with `cd app && npm install && npm run dev` (needs `python3` on PATH, plus `dvrescue` for DV;
 engines load from the pinned submodules automatically).
 
-Next: the Canvas tape-map UI, export of the merged file, damage-frame thumbnails, and drag-drop
-ingest. See [AGENTS.md](AGENTS.md) for the architecture and the `tapeflow.analysis/1` contract.
+Next (mostly UI): the **Canvas tape-map** (the hero view), drag-drop ingest, and the re-capture
+checklist. See [AGENTS.md](AGENTS.md) for the architecture, the `tapeflow.analysis/1` contract, and
+the `window.api` surface.

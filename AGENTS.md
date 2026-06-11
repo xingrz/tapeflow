@@ -190,21 +190,33 @@ thousands of GOPs/frames — SVG/DOM would choke; Canvas pans/zooms smoothly).
   re-capture" vs "2 dirty copies — may improve"). Click a row ⇄ highlight on the map.
 - **Headline verdict**, loud and top: "✅ Complete — ready to export" or "⚠ 3 spots need
   re-capture (~4 s), 1 region missing entirely". Each round the user's real question is "am I done?"
-- **Damage-frame thumbnails** (sidecar `thumbnail` via ffmpeg): show the damaged frame (and the
-  last-good frame) beside each row, so the user can *see* the mosaic and recognise it while scrubbing
-  the physical tape. For a pure `missing` gap there is no frame — bracket it with the surrounding
-  good frames.
-- **Drag-drop ingest**: drop a capture on the window → main copies it into the working dir (with
-  progress) → auto re-analyse (only the new file gets indexed, thanks to the engine cache).
+- **Damage-frame thumbnails** — `window.api.thumbnail(dir, file, seconds)` returns a PNG data URL.
+  The sidecar grabs the frame at `seconds` into *that capture's own playback*; **the renderer
+  computes the offset**: `seconds = tcToSeconds(spot.tcStart) − tcToSeconds(capture.tcSpan[0])`,
+  where `capture` is the one named in `spot.coverage[0]`. Show the damaged frame beside each
+  re-capture row so the user can *see* the mosaic. A pure `missing` gap has no frame to grab.
+- **Drag-drop ingest** — `window.api.ingest(dir, srcPaths)` copies dropped files into the working
+  dir (Node fs in main) and returns the copied basenames; then call `analyze` again (only the new
+  file gets indexed, thanks to the engine cache). The renderer supplies the dropped paths via
+  Electron's `webUtils.getPathForFile(file)`.
 - **Re-capture checklist state** (`.tapeflow/state.json`): each spot is outstanding / now-covered /
   accepted-unrecoverable. Re-analysis auto-marks covered ones; the user can accept a physically
   unreadable spot so it stops nagging.
-- **Export**: when complete/accepted, build the merged file (sidecar `build`) and surface the
-  engine's self-check (AUX timecode survived, CC/TEI integrity, decode clean) as a reassuring green
-  check.
+- **Export** — `window.api.pickSave(name)` for a destination, then `window.api.build(dir, output)`
+  → `BuildResult`. For HDV it carries a `verify` summary (AUX survived, CC/TEI integrity, decode) —
+  surface it as a green check, or a warning when a knowingly-damaged merge is exported; DV has no
+  separate self-check (`verify: null`). A minimal "Export merged…" button already exists in App.vue
+  to prove the path — redesign it.
 
 Ugly-first is fine and expected. Prioritise correct data binding and the tape-map's information
 content; visual polish is the follow-up.
+
+**The renderer surface** (`window.api`, brokered by main → sidecar) is typed in
+[app/src/renderer/src/env.d.ts](app/src/renderer/src/env.d.ts) and `types.ts` — bind to those. It
+is: `pickDir` · `pickSave` · `capabilities` · `analyze(dir)` · `build(dir, output)` ·
+`thumbnail(dir, file, seconds)` · `ingest(dir, srcPaths)` · `onProgress(cb)`. All long jobs stream
+`progress` notifications through `onProgress`. The renderer never touches the filesystem or the
+sidecar directly.
 
 ## Tech stack (decided)
 
@@ -284,19 +296,20 @@ It is a polyglot monorepo, but needs no monorepo tool — `app/` has its own `pa
 
 ## Status
 
-**Vertical slice works on real tapes — both formats.** Engine `--json`/library contracts are pinned;
-the sidecar discovers a working dir, **routes by format**, runs hdvmerge (HDV) or dvmerge→dvrescue
-(DV), and normalises to `tapeflow.analysis/1` over JSON-RPC (capabilities + analyze, progress
-streamed); the Vue app picks a dir, calls analyze, and renders the completeness verdict + re-capture
-list + captures (plain, ugly-first). HDV verified on a real 12-capture tape; DV verified end-to-end
-(pipeline + normaliser); the app builds and typechecks.
+**Backend is contract-complete; ready for the UI handoff.** The sidecar serves the full method set
+over JSON-RPC — `capabilities`, `analyze` (HDV + DV, both verified on real tapes), `build` (export:
+HDV lossless byte-concat + self-check, DV keeps dvrescue's merge), `thumbnail` (ffmpeg frame → PNG)
+— and Electron main brokers them to a typed `window.api` (including drag-drop `ingest`). The Vue app
+is the plain ugly-first placeholder (verdict + lists + a minimal export button); making it good —
+above all the **Canvas tape-map** — is the UI agent's job. The app builds and typechecks; the
+sidecar has unit tests + verified smokes.
 
-**Not yet wired** (build on the slice, in roughly this order):
-- the **Canvas tape-map** (the hero view — position by TC, see "The UI it drives") and per-capture
-  `health` runs — the latter needs hdvmerge's `--json` to expose per-GOP damage positions (extend
-  `jsonout` + a lock-step test, bump the pin);
-- `build` (export the merged file + surface the engine self-check) and `thumbnail` (ffmpeg) — both
-  stubbed with NotImplemented;
-- **drag-drop ingest** (copy into the working dir + auto re-analyse) and the
+**Remaining (UI agent unless noted):**
+- the **Canvas tape-map** — the hero view (position by TC, see "The UI it drives");
+- **drag-drop UI** (the `ingest` API + main handler exist; needs the renderer drop zone) and the
   `.tapeflow/state.json` re-capture checklist (outstanding / covered / accepted);
-- **NTSC DV** — the sidecar defaults to PAL 25 fps; needs a per-tape fps setting.
+- per-capture `health` runs for tape-map lane colouring — **engine work**: hdvmerge's `--json` must
+  expose per-GOP damage positions (extend `jsonout` + a lock-step test, bump the pin); v1 draws
+  solid lanes without it;
+- **NTSC DV** — **engine/sidecar work**: the sidecar defaults to PAL 25 fps; needs a per-tape fps
+  setting.
