@@ -134,6 +134,15 @@ def _hdv_capture_damage(s):
     return out
 
 
+def _capture_ranges(s):
+    """The TC segments this capture actually covers (split at its internal drops), so a lane shows
+    real gaps. Falls back to the whole tc span when the engine doesn't supply coverage."""
+    cov = s.get("coverage") or []
+    if cov:
+        return [{"tcStart": c["tc0"], "tcEnd": c["tc1"]} for c in cov]
+    return [{"tcStart": s.get("tc0"), "tcEnd": s.get("tc1")}]
+
+
 def _hdv_capture(s, files_by_tag):
     return {
         "tag": s["tag"],
@@ -143,6 +152,7 @@ def _hdv_capture(s, files_by_tag):
         "recSpan": [s.get("rec0"), s.get("rec1")],
         "health": [],   # legacy run-length field, unused; per-capture damage is `damage` below
         "damage": _hdv_capture_damage(s),
+        "ranges": _capture_ranges(s),
     }
 
 
@@ -237,7 +247,8 @@ def _dv_capture(src, files_by_tag, fps):
     tag = src["tag"]
     if not src.get("aligned"):
         return {"tag": tag, "file": files_by_tag.get(tag, tag), "axis": [0, 0],
-                "tcSpan": [None, None], "recSpan": [None, None], "health": [], "damage": []}
+                "tcSpan": [None, None], "recSpan": [None, None], "health": [], "damage": [],
+                "ranges": []}
     return {
         "tag": tag,
         "file": files_by_tag.get(tag, tag),
@@ -246,6 +257,8 @@ def _dv_capture(src, files_by_tag, fps):
         "recSpan": [src["rdt0"], src["rdt1"]],
         "health": [],
         "damage": _dv_capture_damage(src),
+        # DV coverage segments aren't exposed yet; one span until dvmerge surfaces per-input gaps
+        "ranges": [{"tcStart": src["tc0"], "tcEnd": src["tc1"]}],
     }
 
 
