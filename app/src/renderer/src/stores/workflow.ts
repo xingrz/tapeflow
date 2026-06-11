@@ -29,6 +29,7 @@ export type CaptureIndexStatus = 'pending' | 'indexing' | 'indexed' | 'cached'
 
 export interface WorkspaceCaptureView extends WorkspaceCapture {
   status: CaptureIndexStatus
+  progress: number // 0..1 byte progress while this file is being indexed
 }
 
 export const useWorkflowStore = defineStore('workflow', () => {
@@ -39,13 +40,17 @@ export const useWorkflowStore = defineStore('workflow', () => {
   const progress = ref('')
   const error = ref('')
   const busy = ref(false)
+  const building = ref(false)
+  const buildProgress = ref<number | null>(null) // 0..1, or null = indeterminate (verifying)
   const buildResult = ref<BuildResult | null>(null)
   const selectedDamageKey = ref<string | null>(null)
   const ingestMessage = ref('')
   const workspaceCaptures = ref<WorkspaceCapture[]>([])
   const captureStatuses = ref<Record<string, CaptureIndexStatus>>({})
+  const captureProgress = ref<Record<string, number>>({})
 
   let unsubscribeProgress: (() => void) | null = null
+  let indexingFile: string | null = null // the file the byte-level 'indexing' events belong to
 
   const damageViews = computed<DamageView[]>(() => {
     if (!analysis.value) return []
@@ -101,7 +106,8 @@ export const useWorkflowStore = defineStore('workflow', () => {
   const captureViews = computed<WorkspaceCaptureView[]>(() =>
     workspaceCaptures.value.map((capture) => ({
       ...capture,
-      status: captureStatuses.value[capture.file] ?? 'pending'
+      status: captureStatuses.value[capture.file] ?? 'pending',
+      progress: captureProgress.value[capture.file] ?? 0
     }))
   )
 
@@ -110,8 +116,12 @@ export const useWorkflowStore = defineStore('workflow', () => {
       unsubscribeProgress = window.api.onProgress((p) => {
         const pr = p as Progress
         const text = formatProgress(pr)
-        if (text) progress.value = text // 'index-start' has no global text; keep the last byte %
-        updateCaptureProgress(pr)
+        if (text) progress.value = text
+        if (pr.phase === 'building' || pr.phase === 'verifying') {
+          buildProgress.value = pr.phase === 'verifying' || !pr.total ? null : (pr.done ?? 0) / pr.total
+        } else {
+          updateCaptureProgress(pr)
+        }
       })
     }
     try {
@@ -180,6 +190,8 @@ export const useWorkflowStore = defineStore('workflow', () => {
     const output = await window.api.pickSave(`${title}-merged${ext}`)
     if (!output) return
     busy.value = true
+    building.value = true
+    buildProgress.value = null
     error.value = ''
     buildResult.value = null
     ingestMessage.value = ''
@@ -190,8 +202,14 @@ export const useWorkflowStore = defineStore('workflow', () => {
       error.value = toMessage(e)
     } finally {
       busy.value = false
+      building.value = false
+      buildProgress.value = null
       progress.value = ''
     }
+  }
+
+  function dismissBuildResult(): void {
+    buildResult.value = null
   }
 
   async function ingestFiles(files: File[]): Promise<void> {
@@ -290,6 +308,10 @@ export const useWorkflowStore = defineStore('workflow', () => {
     const next: Record<string, CaptureIndexStatus> = {}
     for (const capture of workspaceCaptures.value) next[capture.file] = status
     captureStatuses.value = next
+    if (status === 'pending') {
+      captureProgress.value = {}
+      indexingFile = null
+    }
   }
 
   function matchCapture(file: string): WorkspaceCapture | undefined {
@@ -298,16 +320,30 @@ export const useWorkflowStore = defineStore('workflow', () => {
     )
   }
 
-  // Per-file index status is driven by per-file START ('index-start') and FINISH ('indexed') events
-  // only. The 'indexing' phase carries BYTE progress of the current file (not a file index/count),
-  // so it must NOT touch per-file status — that was the bug that marked every file "indexed" at once.
+  // Per-file index status/progress is driven by per-file START ('index-start') and FINISH
+  // ('indexed') events, which carry the file. The 'indexing' phase carries BYTE progress of the
+  // CURRENT file but no filename, so it's attributed to the last 'index-start' file — it must never
+  // touch per-file STATUS (that was the bug that marked every file "indexed" at once).
   function updateCaptureProgress(p: Progress): void {
-    if (!workspaceCaptures.value.length || !p.file) return
+    if (!workspaceCaptures.value.length) return
+    if (p.phase === 'indexing') {
+      if (indexingFile && p.total) {
+        captureProgress.value = {
+          ...captureProgress.value,
+          [indexingFile]: Math.min(1, (p.done ?? 0) / p.total)
+        }
+      }
+      return
+    }
+    if (!p.file) return
     const matched = matchCapture(p.file)
     if (!matched) return
     if (p.phase === 'index-start') {
+      indexingFile = matched.file
+      captureProgress.value = { ...captureProgress.value, [matched.file]: 0 }
       captureStatuses.value = { ...captureStatuses.value, [matched.file]: 'indexing' }
     } else if (p.phase === 'indexed') {
+      captureProgress.value = { ...captureProgress.value, [matched.file]: 1 }
       captureStatuses.value = {
         ...captureStatuses.value,
         [matched.file]: p.cached ? 'cached' : 'indexed'
@@ -333,6 +369,8 @@ export const useWorkflowStore = defineStore('workflow', () => {
     progressText,
     error,
     busy,
+    building,
+    buildProgress,
     buildResult,
     selectedDamageKey,
     selectedDamage,
@@ -351,6 +389,7 @@ export const useWorkflowStore = defineStore('workflow', () => {
     pickDir,
     analyze,
     exportMerged,
+    dismissBuildResult,
     ingestFiles,
     setAccepted,
     selectDamage,

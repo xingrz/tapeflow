@@ -30,14 +30,15 @@ export function shortPath(path: string | null | undefined): string {
 }
 
 export function formatProgress(p: Progress): string {
-  if (p.phase === 'index-start') return '' // per-file start marker; no global text
-  if (p.phase === 'indexing' && p.total) {
-    const percent = Math.floor((100 * (p.done ?? 0)) / p.total)
-    return `Indexing ${percent}%`
-  }
+  // the byte percent now lives per-file in each capture's index badge, so the global text just
+  // names which file is being indexed (no percent)
+  if (p.phase === 'index-start' && p.file) return `Indexing ${p.file}`
+  if (p.phase === 'indexing') return ''
   if (p.phase === 'indexed' && p.file) {
     return `${p.cached ? 'Using cached index for' : 'Indexed'} ${p.file}`
   }
+  if (p.phase === 'building') return 'Building merged file'
+  if (p.phase === 'verifying') return 'Verifying merged file'
   if (p.phase === 'tool' && p.tool) return `Running ${p.tool}`
   return sentenceCase(p.phase || 'Working')
 }

@@ -124,7 +124,19 @@ function compareMtime(a: number | undefined, b: number | undefined): number {
             </td>
             <td>{{ capture.format.toUpperCase() }}</td>
             <td>{{ formatBytes(capture.sizeBytes) }}</td>
-            <td><span class="index-status" :class="capture.status">{{ capture.status }}</span></td>
+            <td>
+              <span
+                v-if="capture.status === 'indexing'"
+                class="index-status indexing index-progress"
+                :title="`Indexing ${Math.round(capture.progress * 100)}%`"
+              >
+                <span class="index-bar">
+                  <span class="index-bar-fill" :style="{ width: `${Math.round(capture.progress * 100)}%` }" />
+                </span>
+                {{ Math.round(capture.progress * 100) }}%
+              </span>
+              <span v-else class="index-status" :class="capture.status">{{ capture.status }}</span>
+            </td>
           </tr>
         </tbody>
       </table>

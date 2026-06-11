@@ -8,6 +8,7 @@ import {
   Download,
   FolderOpen,
   HardDrive,
+  Loader2,
   RefreshCw,
   UploadCloud,
   XCircle
@@ -213,7 +214,28 @@ function clamp(value: number, min: number, max: number): number {
       <span>{{ workflow.error }}</span>
     </p>
 
-    <BuildPanel v-if="workflow.buildResult" :result="workflow.buildResult" />
+    <section v-if="workflow.building" class="build-progress" aria-label="Export progress">
+      <Loader2 :size="18" class="spin" />
+      <div class="build-progress-body">
+        <strong>{{ workflow.buildProgress == null ? 'Verifying merged file…' : 'Building merged file…' }}</strong>
+        <div class="progress-track">
+          <div
+            class="progress-fill"
+            :class="{ indeterminate: workflow.buildProgress == null }"
+            :style="workflow.buildProgress == null ? undefined : { width: `${Math.round(workflow.buildProgress * 100)}%` }"
+          />
+        </div>
+      </div>
+      <span v-if="workflow.buildProgress != null" class="build-progress-pct">
+        {{ Math.round(workflow.buildProgress * 100) }}%
+      </span>
+    </section>
+
+    <BuildPanel
+      v-if="workflow.buildResult"
+      :result="workflow.buildResult"
+      @dismiss="workflow.dismissBuildResult"
+    />
 
     <template v-if="hasWorkspace">
       <section
