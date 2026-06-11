@@ -113,6 +113,19 @@ def _hdv_damage(hdv, fps):
             "severity": "missing in every capture",
             "runs": [],   # gaps have no TC; drawn by axis extent
         })
+    # tape recorded but unreadable in every capture (rec-run TC + wall clock jump together)
+    for k, lo in enumerate(hdv.get("lost", [])):
+        out.append({
+            "id": "l%d" % k,
+            "kind": "missing",
+            "axis": [lo["frame"], lo["frame"]],
+            "tcStart": lo["tc0"], "tcEnd": lo["tc1"],
+            "recStart": lo["rec0"], "recEnd": lo["rec1"],
+            "durationFrames": lo["frames"],
+            "coverage": [], "copies": 0,
+            "severity": "recorded but unreadable in every capture",
+            "runs": [{"tcStart": lo["tc0"], "tcEnd": lo["tc1"]}],
+        })
     return out
 
 

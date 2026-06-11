@@ -97,6 +97,19 @@ class TestNormalizeHdv(unittest.TestCase):
         self.assertEqual(len(d["damage"]), 1)
         self.assertEqual(d["damage"][0]["axis"], [20, 28])
 
+    def test_lost_tape_becomes_a_missing_spot(self):
+        h = _hdv(complete=False)
+        h["lost"] = [{"frame": 500, "tag": "capA", "tc0": "07:07:11:07", "tc1": "07:07:13:17",
+                      "rec0": "2009-05-11 08:09:17", "rec1": "2009-05-11 08:09:19", "frames": 59}]
+        d = normalize.from_hdvmerge(h, "/work", {})
+        spot = next(x for x in d["damage"]
+                    if x["kind"] == "missing" and x["tcStart"] == "07:07:11:07")
+        self.assertEqual(spot["tcEnd"], "07:07:13:17")
+        self.assertEqual(spot["copies"], 0)
+        self.assertIn("unreadable", spot["severity"])
+        self.assertEqual(spot["runs"], [{"tcStart": "07:07:11:07", "tcEnd": "07:07:13:17"}])
+        self.assertEqual(d["summary"]["missingFrames"], 59)
+
     def test_gap_becomes_missing_with_no_coverage(self):
         d = normalize.from_hdvmerge(_hdv(gaps=[[40, 49]], complete=False), "/work", {})
         miss = [x for x in d["damage"] if x["kind"] == "missing"]
