@@ -220,8 +220,13 @@ ever involved.
 tapeflow/
   engines/            git submodules, pinned (consumed via --json, never edited here)
     hdvmerge/  dvmerge/
-  engine/             (planned) Python sidecar: JSON-RPC loop, format routing, normalisation
-  app/               (planned) Electron + Vue: main (Node) + renderer (Vue), the UI
+  engine/             Python sidecar: JSON-RPC loop, format routing, normalisation
+    src/tapeflow_engine/  rpc.py · methods.py · analyze.py · normalize.py · _bootstrap.py
+    tests/                test_rpc.py · test_normalize.py
+  app/               Electron + Vue: main (Node) + renderer (Vue), the UI
+    src/main/             index.ts (window + IPC) · sidecar.ts (JSON-RPC client)
+    src/preload/          index.ts (contextBridge -> window.api)
+    src/renderer/src/     App.vue · types.ts (the tapeflow.analysis/1 TS types)
   AGENTS.md  README.md
 ```
 
@@ -239,6 +244,13 @@ It is a polyglot monorepo, but needs no monorepo tool — `app/` has its own `pa
   git -C engines/<name> checkout <commit>`, then `git add engines/<name>` and commit the new pin.
 - **Engine work happens in the standalone repos** (`~/Projects/hdvmerge`, `~/Projects/dvmerge`),
   not inside the submodule copies; tapeflow only adopts pinned versions.
+- **Run the app in dev**: `cd app && npm install && npm run dev`. Electron main spawns the sidecar as
+  `python3 -m tapeflow_engine` (cwd = repo root, `PYTHONPATH=engine/src`); the engines load from the
+  pinned submodules via `_bootstrap`, so no pip install is needed. Needs `python3` on PATH; override
+  the interpreter with `TAPEFLOW_PYTHON`. ffmpeg/dvrescue are optional/required per format as above.
+- **Run the sidecar tests**: `cd engine && python -m unittest discover`.
+- **Drive the sidecar directly** (no UI): pipe NDJSON requests to `PYTHONPATH=engine/src python -m
+  tapeflow_engine`, e.g. `{"jsonrpc":"2.0","id":1,"method":"analyze","params":{"dir":"…"}}`.
 
 ## When making changes (conventions / invariants)
 
@@ -262,7 +274,17 @@ It is a polyglot monorepo, but needs no monorepo tool — `app/` has its own `pa
 
 ## Status
 
-Engine `--json` contracts are in place and pinned (the foundation). Next: the `engine/` sidecar and
-an end-to-end **vertical slice** (pick dir → sidecar runs hdvmerge `--json` → normalise → render a
-plain verdict + re-capture list), HDV first (self-contained, no external binary), DV after via
-`dvrescue`. The Canvas tape-map, thumbnails, drag-drop and export build on that slice.
+**Vertical slice works (HDV).** Engine `--json` contracts are pinned; the sidecar discovers a
+working dir, runs hdvmerge, and normalises to `tapeflow.analysis/1` over JSON-RPC (capabilities +
+analyze, progress streamed); the Vue app picks a dir, calls analyze, and renders the completeness
+verdict + re-capture list + captures (plain, ugly-first). End-to-end verified on synthetic captures;
+the app builds and typechecks (launching the window needs `npm run dev` on a real desktop).
+
+**Not yet wired** (build on the slice, in roughly this order):
+- the **Canvas tape-map** (the hero view) and per-capture `health` runs — the latter needs hdvmerge's
+  `--json` to expose per-GOP damage positions (extend `jsonout` + lock-step test, bump the pin);
+- **DV** path (`dvmerge` + `dvrescue`) in `analyze` — currently returns a clear "not wired" error;
+- `build` (export the merged file + surface the engine self-check) and `thumbnail` (ffmpeg) — both
+  stubbed with NotImplemented;
+- **drag-drop ingest** (copy into the working dir + auto re-analyse) and the
+  `.tapeflow/state.json` re-capture checklist (outstanding / covered / accepted).
