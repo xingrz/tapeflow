@@ -1,319 +1,322 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue'
-import type { BuildResult, Capabilities, Progress, TapeAnalysis } from './types'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
+import {
+  AlertTriangle,
+  CheckCircle2,
+  ChevronsLeft,
+  ChevronsUp,
+  Download,
+  FolderOpen,
+  HardDrive,
+  RefreshCw,
+  UploadCloud,
+  XCircle
+} from '@lucide/vue'
+import BuildPanel from './components/BuildPanel.vue'
+import CaptureTable from './components/CaptureTable.vue'
+import DamageSidebar from './components/DamageSidebar.vue'
+import TapeMap from './components/TapeMap.vue'
+import { useWorkflowStore, type DamageView } from './stores/workflow'
+import { formatDurationFrames, shortPath } from './utils/format'
 
-// NOTE: deliberately plain ("ugly-first"). The job here is correct data binding to
-// tapeflow.analysis/1; the Canvas tape-map and visual polish are the follow-up (see AGENTS.md).
+const workflow = useWorkflowStore()
+const dragActive = ref(false)
+const tapeMapRef = ref<InstanceType<typeof TapeMap> | null>(null)
+const workspaceRef = ref<HTMLElement | null>(null)
+const leftPaneRef = ref<HTMLElement | null>(null)
+const rightWidth = ref(360)
+const capturesHeight = ref(220)
+const rightCollapsed = ref(false)
+const capturesCollapsed = ref(false)
+let dragDepth = 0
+let activeResize: 'right' | 'captures' | null = null
 
-const caps = ref<Capabilities | null>(null)
-const dir = ref<string | null>(null)
-const analysis = ref<TapeAnalysis | null>(null)
-const progress = ref<string>('')
-const error = ref<string>('')
-const busy = ref(false)
-const buildResult = ref<BuildResult | null>(null)
-
-let unsub: (() => void) | null = null
-
-onMounted(async () => {
-  unsub = window.api.onProgress((p) => {
-    const pr = p as Progress
-    if (pr.phase === 'indexing' && pr.total) {
-      progress.value = `indexing ${Math.floor((100 * (pr.done ?? 0)) / pr.total)}%`
-    } else if (pr.phase === 'indexed') {
-      progress.value = `indexed ${pr.file}${pr.cached ? ' (cached)' : ''}`
-    } else {
-      progress.value = pr.phase
-    }
-  })
-  try {
-    caps.value = await window.api.capabilities()
-  } catch (e) {
-    error.value = String(e)
-  }
+const missingDuration = computed(() => {
+  const analysis = workflow.analysis
+  if (!analysis) return '0 s'
+  const frames = workflow.missingDamage.reduce((sum, view) => sum + view.spot.durationFrames, 0)
+  return formatDurationFrames(frames, analysis.fps)
 })
 
-onUnmounted(() => unsub?.())
+const hasWorkspace = computed(() => Boolean(workflow.dir || workflow.analysis))
 
-async function pickDir() {
-  const d = await window.api.pickDir()
-  if (d) {
-    dir.value = d
-    await analyze()
+const workspaceStyle = computed(() => ({
+  gridTemplateColumns: rightCollapsed.value
+    ? 'minmax(0, 1fr) 6px 34px'
+    : `minmax(0, 1fr) 6px ${rightWidth.value}px`
+}))
+
+const leftPaneStyle = computed(() => ({
+  gridTemplateRows: capturesCollapsed.value
+    ? 'minmax(0, 1fr) 6px 34px'
+    : `minmax(0, 1fr) 6px ${capturesHeight.value}px`
+}))
+
+onMounted(() => void workflow.init())
+onUnmounted(() => {
+  workflow.dispose()
+  stopResize()
+})
+
+function onDragEnter(e: DragEvent): void {
+  if (!hasFiles(e)) return
+  e.preventDefault()
+  dragDepth += 1
+  dragActive.value = true
+}
+
+function onDragOver(e: DragEvent): void {
+  if (!hasFiles(e)) return
+  e.preventDefault()
+  if (e.dataTransfer) e.dataTransfer.dropEffect = workflow.dir ? 'copy' : 'none'
+}
+
+function onDragLeave(e: DragEvent): void {
+  if (!hasFiles(e)) return
+  e.preventDefault()
+  dragDepth = Math.max(0, dragDepth - 1)
+  dragActive.value = dragDepth > 0
+}
+
+async function onDrop(e: DragEvent): Promise<void> {
+  if (!hasFiles(e)) return
+  e.preventDefault()
+  dragDepth = 0
+  dragActive.value = false
+  const files = Array.from(e.dataTransfer?.files ?? [])
+  await workflow.ingestFiles(files)
+}
+
+function hasFiles(e: DragEvent): boolean {
+  return Array.from(e.dataTransfer?.types ?? []).includes('Files')
+}
+
+async function setAccepted(view: DamageView, accepted: boolean): Promise<void> {
+  await workflow.setAccepted(view.spot, accepted)
+}
+
+function selectDamage(key: string): void {
+  workflow.selectDamage(key)
+  const view = workflow.damageViews.find((item) => item.key === key)
+  if (view) tapeMapRef.value?.focusDamage(view.spot)
+}
+
+function selectCapture(tag: string): void {
+  tapeMapRef.value?.focusCapture(tag)
+}
+
+function startRightResize(e: PointerEvent): void {
+  if (rightCollapsed.value) return
+  activeResize = 'right'
+  beginResize(e)
+}
+
+function startCapturesResize(e: PointerEvent): void {
+  if (capturesCollapsed.value) return
+  activeResize = 'captures'
+  beginResize(e)
+}
+
+function beginResize(e: PointerEvent): void {
+  e.preventDefault()
+  window.addEventListener('pointermove', onResize)
+  window.addEventListener('pointerup', stopResize)
+}
+
+function onResize(e: PointerEvent): void {
+  if (activeResize === 'right' && workspaceRef.value) {
+    const rect = workspaceRef.value.getBoundingClientRect()
+    rightWidth.value = clamp(rect.right - e.clientX, 280, Math.max(300, rect.width - 520))
+  }
+  if (activeResize === 'captures' && leftPaneRef.value) {
+    const rect = leftPaneRef.value.getBoundingClientRect()
+    capturesHeight.value = clamp(rect.bottom - e.clientY, 150, Math.max(180, rect.height - 220))
   }
 }
 
-async function analyze() {
-  if (!dir.value || busy.value) return
-  busy.value = true
-  error.value = ''
-  buildResult.value = null
-  progress.value = 'starting…'
-  try {
-    analysis.value = await window.api.analyze(dir.value)
-  } catch (e) {
-    error.value = String(e)
-    analysis.value = null
-  } finally {
-    busy.value = false
-    progress.value = ''
-  }
+function stopResize(): void {
+  activeResize = null
+  window.removeEventListener('pointermove', onResize)
+  window.removeEventListener('pointerup', stopResize)
 }
 
-// Minimal export — proves the build wiring end-to-end. The UI agent will redesign this.
-async function exportMerged() {
-  if (!analysis.value || !dir.value || busy.value) return
-  const ext = analysis.value.format === 'hdv' ? '.m2t' : '.dv'
-  const out = await window.api.pickSave((analysis.value.tape.title || 'merged') + ext)
-  if (!out) return
-  busy.value = true
-  error.value = ''
-  buildResult.value = null
-  progress.value = 'exporting…'
-  try {
-    buildResult.value = await window.api.build(dir.value, out)
-  } catch (e) {
-    error.value = String(e)
-  } finally {
-    busy.value = false
-    progress.value = ''
-  }
-}
-
-function tc(s: string | null): string {
-  return s ?? '—'
-}
-function dur(frames: number, fps: number): string {
-  const sec = frames / (fps || 25)
-  return `${sec.toFixed(1)}s`
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value))
 }
 </script>
 
 <template>
-  <main>
-    <header>
-      <h1>tapeflow</h1>
-      <div class="caps" v-if="caps">
-        engines: hdvmerge {{ caps.engines.hdvmerge ? '✓' : '✗' }} ·
-        dvmerge {{ caps.engines.dvmerge ? '✓' : '✗' }} &nbsp;|&nbsp;
-        tools: ffmpeg {{ caps.tools.ffmpeg ? '✓' : '✗' }} ·
-        dvrescue {{ caps.tools.dvrescue ? '✓' : '✗' }}
+  <main
+    class="app-shell"
+    :class="{ dragging: dragActive }"
+    @dragenter="onDragEnter"
+    @dragover="onDragOver"
+    @dragleave="onDragLeave"
+    @drop="onDrop"
+  >
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">tf</div>
+        <div>
+          <h1>tapeflow</h1>
+          <p>DV / HDV merge</p>
+        </div>
+      </div>
+
+      <section class="action-bar" aria-label="Workspace actions">
+        <button class="primary-action" type="button" :disabled="workflow.busy" @click="workflow.pickDir">
+          <FolderOpen :size="15" />
+          Choose directory
+        </button>
+        <button class="tool-button" type="button" :disabled="!workflow.dir || workflow.busy" @click="workflow.analyze">
+          <RefreshCw :size="15" />
+          Re-analyse
+        </button>
+        <button
+          class="tool-button"
+          type="button"
+          :disabled="!workflow.canExport"
+          @click="workflow.exportMerged"
+        >
+          <Download :size="15" />
+          Export merged
+        </button>
+        <div class="path-chip">
+          <HardDrive :size="14" />
+          <span>{{ shortPath(workflow.dir) }}</span>
+        </div>
+        <div v-if="workflow.progressText" class="progress-chip">{{ workflow.progressText }}</div>
+      </section>
+
+      <div v-if="workflow.caps" class="cap-strip" aria-label="Capabilities">
+        <span class="cap-chip" :class="{ ok: workflow.caps.engines.hdvmerge }">
+          <component :is="workflow.caps.engines.hdvmerge ? CheckCircle2 : XCircle" :size="14" />
+          hdvmerge
+        </span>
+        <span class="cap-chip" :class="{ ok: workflow.caps.engines.dvmerge }">
+          <component :is="workflow.caps.engines.dvmerge ? CheckCircle2 : XCircle" :size="14" />
+          dvmerge
+        </span>
+        <span class="cap-chip" :class="{ ok: workflow.caps.tools.ffmpeg }">
+          <component :is="workflow.caps.tools.ffmpeg ? CheckCircle2 : AlertTriangle" :size="14" />
+          ffmpeg
+        </span>
+        <span class="cap-chip" :class="{ ok: workflow.caps.tools.dvrescue }">
+          <component :is="workflow.caps.tools.dvrescue ? CheckCircle2 : AlertTriangle" :size="14" />
+          dvrescue
+        </span>
       </div>
     </header>
 
-    <section class="bar">
-      <button @click="pickDir" :disabled="busy">Choose working directory…</button>
-      <button @click="analyze" :disabled="!dir || busy">Re-analyse</button>
-      <button @click="exportMerged" :disabled="!analysis || !analysis.buildable || busy">
-        Export merged…
-      </button>
-      <span class="dir" v-if="dir">{{ dir }}</span>
-      <span class="progress" v-if="busy">{{ progress }}</span>
-    </section>
+    <p v-if="workflow.error" class="error-banner">
+      <AlertTriangle :size="17" />
+      <span>{{ workflow.error }}</span>
+    </p>
 
-    <section class="build" v-if="buildResult" :class="buildResult.ok ? 'ok' : 'warn'">
-      {{ buildResult.ok ? '✅' : '⚠' }} Exported
-      {{ (buildResult.sizeBytes / 1e9).toFixed(2) }} GB → {{ buildResult.output }}
-      <template v-if="buildResult.verify">
-        · AUX {{ buildResult.verify.aux ? 'OK' : 'MISSING' }} · CC/TEI
-        {{ buildResult.verify.ccOk ? 'OK' : 'FAIL' }}
-      </template>
-    </section>
+    <BuildPanel v-if="workflow.buildResult" :result="workflow.buildResult" />
 
-    <p class="error" v-if="error">{{ error }}</p>
-
-    <template v-if="analysis">
+    <template v-if="hasWorkspace">
       <section
-        class="verdict"
-        :class="analysis.complete ? 'ok' : 'warn'"
+        class="verdict-band"
+        :class="{ complete: workflow.analysis?.complete, warn: !workflow.analysis?.complete }"
       >
-        <template v-if="analysis.complete">
-          ✅ Complete — every tape position has a clean copy.
-          {{ analysis.buildable ? 'Ready to export.' : '(seams need attention before export)' }}
-        </template>
-        <template v-else>
-          ⚠ {{ analysis.summary.recaptureSpots }} spot(s) need re-capture<span
-            v-if="analysis.summary.missingFrames"
-          >, ~{{ dur(analysis.summary.missingFrames, analysis.fps) }} missing entirely</span
-          ><span v-if="analysis.summary.unusedCaptures">,
-            {{ analysis.summary.unusedCaptures }} capture(s) unplaced</span
-          >.
-        </template>
+        <component :is="workflow.analysis?.complete ? CheckCircle2 : AlertTriangle" :size="24" />
+        <div>
+          <strong>{{ workflow.verdictText }}</strong>
+          <p v-if="workflow.analysis">
+            {{ workflow.analysis.tape.title || workflow.analysis.format.toUpperCase() }}
+            | {{ workflow.analysis.format.toUpperCase() }} @ {{ workflow.analysis.fps }} fps
+            | TC {{ workflow.analysis.tape.tcStart ?? '-' }} - {{ workflow.analysis.tape.tcEnd ?? '-' }}
+            | {{ formatDurationFrames(workflow.analysis.tape.durationFrames, workflow.analysis.fps) }}
+          </p>
+          <p v-else>
+            {{ workflow.captureViews.length }} capture files queued
+            <span v-if="workflow.busy">| {{ workflow.progressText || 'Analysing' }}</span>
+          </p>
+        </div>
+        <div class="verdict-metrics">
+          <span><strong>{{ workflow.outstandingDamage.length }}</strong> outstanding</span>
+          <span><strong>{{ workflow.dirtyDamage.length }}</strong> dirty</span>
+          <span><strong>{{ missingDuration }}</strong> missing</span>
+          <span><strong>{{ workflow.captureViews.length }}</strong> captures</span>
+        </div>
       </section>
 
-      <section class="meta">
-        <strong>{{ analysis.tape.title || analysis.format.toUpperCase() }}</strong> ·
-        {{ analysis.format.toUpperCase() }} @ {{ analysis.fps }} fps ·
-        TC {{ tc(analysis.tape.tcStart) }} – {{ tc(analysis.tape.tcEnd) }} ·
-        {{ dur(analysis.tape.durationFrames, analysis.fps) }}
-      </section>
+      <div ref="workspaceRef" class="workspace-grid" :style="workspaceStyle">
+        <div ref="leftPaneRef" class="map-column" :style="leftPaneStyle">
+          <TapeMap
+            v-if="workflow.analysis"
+            ref="tapeMapRef"
+            :analysis="workflow.analysis"
+            :damage-views="workflow.damageViews"
+            :selected-key="workflow.selectedDamageKey"
+            @select="selectDamage"
+          />
+          <section v-else class="panel analysis-placeholder">
+            <h2>{{ workflow.busy ? 'Analysing workspace' : 'Workspace ready' }}</h2>
+            <p>{{ workflow.progressText || 'Run analysis to build the tape map.' }}</p>
+          </section>
 
-      <section v-if="analysis.damage.length">
-        <h2>Re-capture list</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>tape TC</th>
-              <th>recording time</th>
-              <th>kind</th>
-              <th>length</th>
-              <th>coverage</th>
-              <th>damage</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="d in analysis.damage" :key="d.id">
-              <td class="mono">{{ tc(d.tcStart) }}</td>
-              <td>{{ tc(d.recStart) }}</td>
-              <td>{{ d.kind }}</td>
-              <td>{{ dur(d.durationFrames, analysis.fps) }}</td>
-              <td>{{ d.copies === 0 ? 'none — lost' : d.coverage.join(', ') }}</td>
-              <td>{{ d.severity }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </section>
-      <section v-else>
-        <h2>Re-capture list</h2>
-        <p>Nothing to re-capture. 🎉</p>
-      </section>
+          <div
+            class="split-handle horizontal"
+            title="Resize captures panel"
+            @pointerdown="startCapturesResize"
+          />
 
-      <section>
-        <h2>Captures</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>file</th>
-              <th>tape TC span</th>
-              <th>recording span</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="c in analysis.captures" :key="c.tag">
-              <td>{{ c.file }}</td>
-              <td class="mono">{{ tc(c.tcSpan[0]) }} – {{ tc(c.tcSpan[1]) }}</td>
-              <td>{{ tc(c.recSpan[0]) }} – {{ tc(c.recSpan[1]) }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </section>
+          <section v-if="capturesCollapsed" class="collapsed-pane bottom">
+            <button class="collapse-button" type="button" title="Show captures" @click="capturesCollapsed = false">
+              <ChevronsUp :size="15" />
+              Captures
+            </button>
+          </section>
+          <div v-else class="captures-shell">
+            <CaptureTable
+              :analysis="workflow.analysis"
+              :captures="workflow.captureViews"
+              @select-capture="selectCapture"
+              @collapse="capturesCollapsed = true"
+            />
+          </div>
+        </div>
+
+        <div class="split-handle vertical" title="Resize re-capture panel" @pointerdown="startRightResize" />
+
+        <section v-if="rightCollapsed" class="collapsed-pane right">
+          <button class="collapse-button vertical-label" type="button" title="Show re-capture" @click="rightCollapsed = false">
+            <ChevronsLeft :size="15" />
+            Re-capture
+          </button>
+        </section>
+        <div v-else class="sidebar-shell">
+          <DamageSidebar
+            :analysis="workflow.analysis"
+            :damage-views="workflow.damageViews"
+            :selected-key="workflow.selectedDamageKey"
+            @select="selectDamage"
+            @accept="setAccepted"
+            @collapse="rightCollapsed = true"
+          />
+        </div>
+      </div>
     </template>
 
-    <p v-else-if="!busy" class="hint">Choose a working directory of overlapping captures to analyse.</p>
+    <section v-else class="empty-state">
+      <UploadCloud :size="34" />
+      <h2>Select a tape working directory</h2>
+      <p>
+        Analyse the overlapping captures for one physical tape, then drop new re-captures here to
+        copy them into the workspace and re-run analysis.
+      </p>
+      <button class="primary-action" type="button" :disabled="workflow.busy" @click="workflow.pickDir">
+        <FolderOpen :size="17" />
+        Choose directory
+      </button>
+    </section>
+
+    <div v-if="dragActive" class="drop-overlay">
+      <UploadCloud :size="34" />
+      <strong>{{ workflow.dir ? 'Drop captures to ingest' : 'Choose a working directory first' }}</strong>
+      <span>{{ workflow.dir ? 'Files will be copied in, then analysis runs again.' : 'tapeflow needs a target tape workspace.' }}</span>
+    </div>
   </main>
 </template>
-
-<style>
-body {
-  margin: 0;
-  font: 14px/1.5 system-ui, -apple-system, sans-serif;
-  color: #1d1d1f;
-  background: #fafafa;
-}
-main {
-  max-width: 980px;
-  margin: 0 auto;
-  padding: 16px 24px 48px;
-}
-header {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  border-bottom: 1px solid #e3e3e3;
-}
-h1 {
-  font-size: 20px;
-  margin: 8px 0;
-}
-.caps {
-  font-size: 12px;
-  color: #666;
-}
-.bar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 16px 0;
-}
-button {
-  padding: 7px 12px;
-  border: 1px solid #c8c8c8;
-  border-radius: 6px;
-  background: #fff;
-  cursor: pointer;
-}
-button:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-.dir {
-  font-family: ui-monospace, monospace;
-  font-size: 12px;
-  color: #444;
-}
-.progress {
-  font-size: 12px;
-  color: #007aff;
-}
-.error {
-  color: #c0392b;
-  white-space: pre-wrap;
-}
-.verdict {
-  padding: 12px 14px;
-  border-radius: 8px;
-  font-weight: 600;
-}
-.verdict.ok {
-  background: #e7f7ec;
-  color: #1d7a3a;
-}
-.verdict.warn {
-  background: #fdf2e2;
-  color: #9a6400;
-}
-.build {
-  margin: 10px 0;
-  padding: 10px 14px;
-  border-radius: 8px;
-  font-size: 13px;
-  word-break: break-all;
-}
-.build.ok {
-  background: #e7f7ec;
-  color: #1d7a3a;
-}
-.build.warn {
-  background: #fdf2e2;
-  color: #9a6400;
-}
-.meta {
-  margin: 12px 0;
-  color: #444;
-}
-h2 {
-  font-size: 15px;
-  margin: 22px 0 8px;
-}
-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-}
-th,
-td {
-  text-align: left;
-  padding: 6px 8px;
-  border-bottom: 1px solid #ededed;
-}
-th {
-  color: #888;
-  font-weight: 600;
-}
-.mono {
-  font-family: ui-monospace, monospace;
-}
-.hint {
-  color: #888;
-}
-</style>

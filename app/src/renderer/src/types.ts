@@ -6,7 +6,7 @@ export type DamageKind = 'dirty' | 'missing'
 export interface DamageSpot {
   id: string
   kind: DamageKind // dirty = covered but every copy damaged (improvable); missing = no copy at all
-  axis: [number, number] // opaque per-engine tape coordinate; for layout only — label with tc/rec
+  axis: [number, number] // opaque per-engine tape coordinate; for layout only - label with tc/rec
   tcStart: string | null
   tcEnd: string | null
   recStart: string | null
@@ -15,6 +15,9 @@ export interface DamageSpot {
   coverage: string[] // capture tags with some frame here; [] => nothing to improve on
   copies: number
   severity: string
+  // precise damaged sub-spans within this spot (for the map); the spot extent (tcStart/tcEnd) is
+  // the coalesced re-capture cue. Empty for `missing` gaps (drawn by axis).
+  runs: CaptureDamage[]
 }
 
 export interface HealthRun {
@@ -30,6 +33,18 @@ export interface Capture {
   tcSpan: [string | null, string | null]
   recSpan: [string | null, string | null]
   health: HealthRun[]
+  // where THIS capture is itself damaged (regardless of whether another copy is clean there)
+  damage: CaptureDamage[]
+  // the TC segments this capture actually holds — split at internal drops, so the lane shows real
+  // gaps instead of one solid bar (a continuity break can drop content)
+  ranges: { tcStart: string | null; tcEnd: string | null }[]
+}
+
+// one damaged run within a single capture, by tape TC
+export interface CaptureDamage {
+  tcStart: string | null
+  tcEnd: string | null
+  severity: string
 }
 
 export interface Segment {
@@ -81,6 +96,14 @@ export interface Progress {
   tool?: string
 }
 
+export interface WorkspaceCapture {
+  file: string
+  stem: string
+  format: 'hdv' | 'dv'
+  sizeBytes: number
+  mtimeMs: number
+}
+
 export interface BuildVerify {
   aux: boolean
   recHead: string | null
@@ -109,4 +132,23 @@ export interface Thumbnail {
   file: string
   seconds: number
   dataUrl: string // a PNG data: URL
+}
+
+export type ChecklistStatus = 'outstanding' | 'accepted' | 'covered'
+
+export interface ChecklistEntry {
+  key: string
+  status: ChecklistStatus
+  kind: DamageKind
+  tcStart: string | null
+  tcEnd: string | null
+  recStart: string | null
+  recEnd: string | null
+  durationFrames: number
+  updatedAt: string
+}
+
+export interface ChecklistState {
+  schema: 'tapeflow.state/1'
+  entries: Record<string, ChecklistEntry>
 }

@@ -8,9 +8,12 @@ contextBridge.exposeInMainWorld('api', {
   capabilities: () => ipcRenderer.invoke('capabilities'),
   analyze: (dir: string) => ipcRenderer.invoke('analyze', dir),
   build: (dir: string, output: string) => ipcRenderer.invoke('build', dir, output),
-  thumbnail: (dir: string, file: string, seconds: number) =>
-    ipcRenderer.invoke('thumbnail', dir, file, seconds),
+  thumbnail: (dir: string, file: string, seconds: number, maxWidth?: number) =>
+    ipcRenderer.invoke('thumbnail', dir, file, seconds, maxWidth),
+  listCaptures: (dir: string) => ipcRenderer.invoke('listCaptures', dir),
   ingest: (dir: string, srcPaths: string[]) => ipcRenderer.invoke('ingest', dir, srcPaths),
+  loadState: (dir: string) => ipcRenderer.invoke('loadState', dir),
+  saveState: (dir: string, state: unknown) => ipcRenderer.invoke('saveState', dir, state),
   onProgress: (cb: (p: unknown) => void) => {
     const handler = (_e: unknown, p: unknown) => cb(p)
     ipcRenderer.on('progress', handler)
