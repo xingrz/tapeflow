@@ -96,6 +96,24 @@ def _hdv_damage(hdv, fps):
     return out
 
 
+def _hdv_capture_damage(s):
+    """This capture's OWN damaged runs (where the capture itself is bad), by tape TC — shown on its
+    lane regardless of whether another capture covers it cleanly. Distinct from the result-level
+    ``damage[]`` (which is only where no clean copy exists)."""
+    out = []
+    for d in s.get("damage", []):
+        kinds = []
+        if d.get("cc"):
+            kinds.append("continuity break")
+        if d.get("tei"):
+            kinds.append("transport error")
+        if d.get("dec"):
+            kinds.append("intra-frame damage")
+        out.append({"tcStart": d.get("tc0"), "tcEnd": d.get("tc1"),
+                    "severity": ", ".join(kinds) or "damage"})
+    return out
+
+
 def _hdv_capture(s, files_by_tag):
     return {
         "tag": s["tag"],
@@ -103,7 +121,8 @@ def _hdv_capture(s, files_by_tag):
         "axis": [s["shift"], s["shift"] + s["ngops"]],   # GOP units on the tape axis
         "tcSpan": [s.get("tc0"), s.get("tc1")],
         "recSpan": [s.get("rec0"), s.get("rec1")],
-        "health": [],   # per-GOP clean/damaged runs aren't in the engine JSON yet (a refinement)
+        "health": [],   # legacy run-length field, unused; per-capture damage is `damage` below
+        "damage": _hdv_capture_damage(s),
     }
 
 
@@ -183,11 +202,18 @@ def _dv_damage(dv, fps):
     return out
 
 
+def _dv_capture_damage(src):
+    """This capture's OWN mosaic runs (Status 'P'), by tape TC — shown on its lane regardless of
+    whether the merge repaired it from another copy."""
+    return [{"tcStart": d.get("tc0"), "tcEnd": d.get("tc1"), "severity": "mosaic"}
+            for d in src.get("damage", [])]
+
+
 def _dv_capture(src, files_by_tag, fps):
     tag = src["tag"]
     if not src.get("aligned"):
         return {"tag": tag, "file": files_by_tag.get(tag, tag), "axis": [0, 0],
-                "tcSpan": [None, None], "recSpan": [None, None], "health": []}
+                "tcSpan": [None, None], "recSpan": [None, None], "health": [], "damage": []}
     return {
         "tag": tag,
         "file": files_by_tag.get(tag, tag),
@@ -195,6 +221,7 @@ def _dv_capture(src, files_by_tag, fps):
         "tcSpan": [src["tc0"], src["tc1"]],
         "recSpan": [src["rdt0"], src["rdt1"]],
         "health": [],
+        "damage": _dv_capture_damage(src),
     }
 
 

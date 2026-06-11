@@ -102,6 +102,17 @@ class TestNormalizeHdv(unittest.TestCase):
                                     "/work", {})
         self.assertEqual(d["summary"]["unusedCaptures"], 1)
 
+    def test_capture_carries_its_own_damage_runs(self):
+        h = _hdv()
+        h["sources"][0]["damage"] = [{"tc0": "07:00:05:00", "tc1": "07:00:06:00",
+                                      "cc": 2, "tei": 0, "dec": 0, "ngops": 2}]
+        d = normalize.from_hdvmerge(h, "/work", {})
+        cap_a, cap_b = d["captures"]
+        self.assertEqual(len(cap_a["damage"]), 1)
+        self.assertEqual(cap_a["damage"][0]["tcStart"], "07:00:05:00")
+        self.assertIn("continuity break", cap_a["damage"][0]["severity"])
+        self.assertEqual(cap_b["damage"], [])        # source with no damage key -> empty
+
 
 def _span(kind="mosaic", cover=(0,), miss=0, dmg=1, bmax=7):
     return {"tf0": 250, "tf1": 250, "length": 1, "tc0": "00:00:10:00", "tc1": "00:00:10:00",
@@ -163,6 +174,15 @@ class TestNormalizeDv(unittest.TestCase):
     def test_unaligned_source_counted(self):
         d = normalize.from_dvmerge(_dv(unaligned=True, complete=False), "/work", {})
         self.assertEqual(d["summary"]["unusedCaptures"], 1)
+
+    def test_capture_carries_its_own_damage_runs(self):
+        dv = _dv()
+        dv["sources"][0]["damage"] = [{"tc0": "00:00:10:00", "tc1": "00:00:11:00", "frames": 25}]
+        d = normalize.from_dvmerge(dv, "/work", {})
+        cap = next(c for c in d["captures"] if c["tag"] == "A-1")
+        self.assertEqual(len(cap["damage"]), 1)
+        self.assertEqual(cap["damage"][0]["tcStart"], "00:00:10:00")
+        self.assertEqual(cap["damage"][0]["severity"], "mosaic")
 
 
 if __name__ == "__main__":
