@@ -28,10 +28,10 @@ def _discover(directory):
     return hdv, dv
 
 
-def analyze(params, notify=None):
-    """``{"dir": ...}`` -> ``tapeflow.analysis/1``. Streams ``progress`` notifications while
-    indexing (the slow first pass; cached files re-run fast)."""
-    directory = params.get("dir")
+def route(directory):
+    """Classify a working dir as one tape of one format. Returns ``(fmt, files)`` with ``fmt`` in
+    ``{"hdv", "dv"}``. Raises ``ValueError`` on a non-directory, an empty dir, or a mix of formats
+    (one tape is one format). Shared by ``analyze`` and ``build``."""
     if not directory or not os.path.isdir(directory):
         raise ValueError("not a directory: %r" % directory)
     hdv, dv = _discover(directory)
@@ -39,10 +39,20 @@ def analyze(params, notify=None):
         raise ValueError("working dir mixes HDV (%d) and DV (%d) captures — one tape is one format"
                          % (len(hdv), len(dv)))
     if hdv:
-        return _analyze_hdv(directory, hdv, notify)
+        return "hdv", hdv
     if dv:
-        return _analyze_dv(directory, dv, notify)
+        return "dv", dv
     raise ValueError("no capture files found in %s" % directory)
+
+
+def analyze(params, notify=None):
+    """``{"dir": ...}`` -> ``tapeflow.analysis/1``. Streams ``progress`` notifications while
+    indexing (the slow first pass; cached files re-run fast)."""
+    directory = params.get("dir")
+    fmt, files = route(directory)
+    if fmt == "hdv":
+        return _analyze_hdv(directory, files, notify)
+    return _analyze_dv(directory, files, notify)
 
 
 def _analyze_hdv(directory, files, notify):

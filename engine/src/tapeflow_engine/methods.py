@@ -5,6 +5,8 @@ import shutil
 
 from . import __version__, _bootstrap
 from . import analyze as analyzemod
+from . import build as buildmod
+from . import thumb as thumbmod
 
 
 def capabilities(params=None, notify=None):
@@ -31,11 +33,11 @@ def analyze(params, notify=None):
 
 
 def build(params, notify=None):
-    raise NotImplementedError("build is not wired yet")
+    return buildmod.build(params, notify=notify)
 
 
 def thumbnail(params, notify=None):
-    raise NotImplementedError("thumbnail is not wired yet")
+    return thumbmod.thumbnail(params, notify=notify)
 
 
 METHODS = {
