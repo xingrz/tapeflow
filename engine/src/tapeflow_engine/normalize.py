@@ -49,11 +49,29 @@ def _tc_frames(tc, fps):
 
 # ---------- HDV (hdvmerge.analysis/1) ----------
 
+def _residual_runs(group):
+    """The PRECISE damaged sub-runs within a re-capture spot — consecutive damaged GOPs (by gop
+    index) coalesced, each as a tape-TC span. A spot bridges short clean gaps for the re-capture
+    cue, but the map should draw the actual damage; these runs line up exactly with the same
+    capture's own-damage runs (both coalesce consecutive damaged GOPs)."""
+    runs = []
+    for r in group:
+        if runs and r.get("gop") == runs[-1]["_g"] + 1:
+            runs[-1]["tcEnd"] = r.get("tc")
+            runs[-1]["_g"] = r.get("gop")
+        else:
+            runs.append({"tcStart": r.get("tc"), "tcEnd": r.get("tc"), "_g": r.get("gop")})
+    for run in runs:
+        del run["_g"]
+    return runs
+
+
 def _hdv_damage(hdv, fps):
     """The unified re-capture list. hdvmerge residuals (present-but-damaged GOPs with no clean copy)
     become ``dirty`` spots — consecutive ones within ~2 s on the same capture are coalesced into one
     spot, the way you'd rewind and re-shoot the region. Alignment gaps (tape no capture covers at
-    all) become ``missing`` spots."""
+    all) become ``missing`` spots. Each spot also carries ``runs``: the precise damaged sub-spans
+    (for drawing on the map), vs the coalesced spot extent (for the re-capture cue)."""
     out = []
     window = fps * 2
     groups = []
@@ -82,6 +100,7 @@ def _hdv_damage(hdv, fps):
             "coverage": [a["tag"]],
             "copies": 1,
             "severity": ", ".join(kinds) or "damage",
+            "runs": _residual_runs(g),
         })
     for k, (lo, hi) in enumerate(hdv["gaps"]):
         out.append({
@@ -92,6 +111,7 @@ def _hdv_damage(hdv, fps):
             "durationFrames": (hi - lo + 1) * 12,   # ~12 frames/GOP, a rough estimate for display
             "coverage": [], "copies": 0,
             "severity": "missing in every capture",
+            "runs": [],   # gaps have no TC; drawn by axis extent
         })
     return out
 
@@ -198,6 +218,8 @@ def _dv_damage(dv, fps):
             "coverage": cover,
             "copies": len(cover),
             "severity": sev,
+            # dvrescue spans are already the actual damaged extent (no 2 s over-bridging like HDV)
+            "runs": [{"tcStart": sp["tc0"], "tcEnd": sp["tc1"]}],
         })
     return out
 

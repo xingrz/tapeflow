@@ -77,6 +77,18 @@ class TestNormalizeHdv(unittest.TestCase):
         self.assertIn("continuity break", spot["severity"])
         self.assertEqual(d["summary"]["recaptureSpots"], 1)
 
+    def test_damage_spot_carries_precise_runs(self):
+        # gop 5-6 and 10-11 are close enough to be ONE re-capture spot (cue), but the map should
+        # show TWO precise runs lining up with the capture's own damage
+        res = [{"frame": g * 4, "rec": None, "tc": "07:00:%02d:00" % g, "tag": "capA",
+                "gop": g, "cc": 1, "tei": 0, "dec": 0} for g in (5, 6, 10, 11)]
+        d = normalize.from_hdvmerge(_hdv(residuals=res, complete=False), "/work", {})
+        self.assertEqual(len(d["damage"]), 1)
+        spot = d["damage"][0]
+        self.assertEqual(len(spot["runs"]), 2)
+        self.assertEqual(spot["runs"][0]["tcStart"], "07:00:05:00")
+        self.assertEqual(spot["runs"][1]["tcEnd"], "07:00:11:00")
+
     def test_consecutive_residuals_coalesce_into_one_spot(self):
         # three damaged GOPs within ~2 s on the same capture = one re-capture target
         res = [{"frame": f, "rec": None, "tc": "07:00:%02d:00" % (f // 4), "tag": "capA",

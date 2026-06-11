@@ -58,8 +58,10 @@ def analyze(params, notify=None):
 def _analyze_hdv(directory, files, notify):
     _bootstrap.ensure_engines_importable()
     from hdvmerge import scan as hscan, plan as hplan, jsonout as hjson, probe as hprobe
+    from hdvmerge.model import Report
 
     cache_dir = os.path.join(directory, ".tapeflow", "hdvmerge")
+    decode = hprobe.have_ffmpeg()
 
     def on_progress(done, total):
         if notify:
@@ -70,8 +72,19 @@ def _analyze_hdv(directory, files, notify):
             name = idx.tag if idx is not None else os.path.basename(path or "?")
             notify("progress", {"phase": "indexed", "file": name, "cached": bool(cached)})
 
-    rep = hscan.analyze(files, decode=hprobe.have_ffmpeg(), cache_dir=cache_dir,
-                        on_progress=on_progress, on_file=on_file)
+    # Index file-by-file (this mirrors hdvmerge.scan.analyze) so we can announce WHICH file is
+    # starting: the byte-level on_progress can't say which file it is in, and on_file fires only on
+    # completion — without a start signal the UI can't show a per-file "indexing" state.
+    sources = []
+    for path in files:
+        if notify:
+            notify("progress", {"phase": "index-start", "file": os.path.basename(path)})
+        idx = hscan.ensure_index(path, decode=decode, cache_dir=cache_dir,
+                                 on_progress=on_progress, on_file=on_file)
+        if idx is not None:
+            sources.append(idx)
+    chain, shifts, gaps = hscan.align(sources)
+    rep = Report(sources=sources, chain=chain, shifts=shifts, gaps=gaps)
     plan = hplan.build_plan(rep)
     hdv = hjson.analysis(rep, plan)
     files_by_tag = {os.path.splitext(os.path.basename(p))[0]: os.path.basename(p) for p in files}
