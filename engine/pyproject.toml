@@ -1,0 +1,19 @@
+[project]
+name = "tapeflow-engine"
+version = "0.1.0"
+description = "tapeflow's Python sidecar: route DV/HDV captures to the merge engines and serve a unified JSON-RPC analysis over stdio"
+requires-python = ">=3.11"
+# The merge engines are provided as git submodules under ../engines and made importable either by
+# an editable install in dev (`pip install -e ../engines/hdvmerge ../engines/dvmerge`) or by being
+# frozen in for release. As a zero-setup fallback the sidecar also adds the submodule `src/` dirs to
+# sys.path when the engines aren't already importable (see tapeflow_engine/_bootstrap.py).
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100

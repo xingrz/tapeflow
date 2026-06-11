@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+build/
+
+# Node / Electron
+node_modules/
+dist/
+out/
+.vite/
+
+# tapeflow working-directory caches — never commit these
+.tapeflow/
+
+# OS
+.DS_Store
+Thumbs.db
