@@ -170,11 +170,21 @@ regions on it.** The signature view is a **tape-map**, rendered on **Canvas 2D**
 thousands of GOPs/frames — SVG/DOM would choke; Canvas pans/zooms smoothly).
 
 - **Tape-map (the hero view).** A horizontal tape axis (dual ruler: tape TC + wall clock). Below it,
-  one **lane per capture** positioned by `captures[].axis`, coloured clean/damaged from `health`.
-  On top, a **best-of / result track**: green where some capture is clean, amber where only damaged
-  copies exist (dirty), red/striped where it's `missing`. That result track *is* the re-capture map.
-  Why it beats tables: you *see* why a spot can't be fixed (no lane covers it) vs. only-dirty (lanes
-  cover it but all damaged), and across rounds you watch red turn green as new captures land.
+  one **lane per capture**, and on top a **best-of / result track**: green where some capture is
+  clean, amber where only damaged copies exist (`dirty`), red/striped where it's `missing`. That
+  result track *is* the re-capture map. Why it beats tables: you *see* why a spot can't be fixed (no
+  lane covers it) vs. only-dirty (lanes cover it but all damaged), and across rounds you watch red
+  turn green as new captures land. Two concrete build notes:
+  - **Position lanes and damage by tape TC, not `axis`.** Convert `tcSpan` / `tcStart`
+    (`"HH:MM:SS:FF"`) to seconds — TC is the natural shared coordinate, frame-accurate, and the
+    engines provide it for every capture and damage spot. `axis` is an opaque, per-engine,
+    not-yet-unified integer (see "Axis semantics"), useful only as a fallback. (Caveat: tape TC is
+    *piecewise*-monotonic — a new recording after a gap can restart it; fine for one head-to-tail
+    tape, but don't assume global monotonicity.)
+  - **Per-lane interior clean/damaged colouring is not available yet** — `captures[].health` is
+    currently always `[]`. Filling it needs hdvmerge's `--json` to expose per-GOP damage positions
+    (extend its `jsonout` + a lock-step test, bump the pin). Until then, draw **solid lanes** and
+    show damage from the separate `damage[]` list (which is complete and accurate).
 - **Re-capture sidebar**, synced to the map: each `damage[]` entry as a row — big copyable **tape
   TC** (the deck cue point), wall clock, duration, `kind`, and coverage ("0 copies — must
   re-capture" vs "2 dirty copies — may improve"). Click a row ⇄ highlight on the map.
@@ -274,17 +284,19 @@ It is a polyglot monorepo, but needs no monorepo tool — `app/` has its own `pa
 
 ## Status
 
-**Vertical slice works (HDV).** Engine `--json` contracts are pinned; the sidecar discovers a
-working dir, runs hdvmerge, and normalises to `tapeflow.analysis/1` over JSON-RPC (capabilities +
-analyze, progress streamed); the Vue app picks a dir, calls analyze, and renders the completeness
-verdict + re-capture list + captures (plain, ugly-first). End-to-end verified on synthetic captures;
-the app builds and typechecks (launching the window needs `npm run dev` on a real desktop).
+**Vertical slice works on real tapes — both formats.** Engine `--json`/library contracts are pinned;
+the sidecar discovers a working dir, **routes by format**, runs hdvmerge (HDV) or dvmerge→dvrescue
+(DV), and normalises to `tapeflow.analysis/1` over JSON-RPC (capabilities + analyze, progress
+streamed); the Vue app picks a dir, calls analyze, and renders the completeness verdict + re-capture
+list + captures (plain, ugly-first). HDV verified on a real 12-capture tape; DV verified end-to-end
+(pipeline + normaliser); the app builds and typechecks.
 
 **Not yet wired** (build on the slice, in roughly this order):
-- the **Canvas tape-map** (the hero view) and per-capture `health` runs — the latter needs hdvmerge's
-  `--json` to expose per-GOP damage positions (extend `jsonout` + lock-step test, bump the pin);
-- **DV** path (`dvmerge` + `dvrescue`) in `analyze` — currently returns a clear "not wired" error;
+- the **Canvas tape-map** (the hero view — position by TC, see "The UI it drives") and per-capture
+  `health` runs — the latter needs hdvmerge's `--json` to expose per-GOP damage positions (extend
+  `jsonout` + a lock-step test, bump the pin);
 - `build` (export the merged file + surface the engine self-check) and `thumbnail` (ffmpeg) — both
   stubbed with NotImplemented;
 - **drag-drop ingest** (copy into the working dir + auto re-analyse) and the
-  `.tapeflow/state.json` re-capture checklist (outstanding / covered / accepted).
+  `.tapeflow/state.json` re-capture checklist (outstanding / covered / accepted);
+- **NTSC DV** — the sidecar defaults to PAL 25 fps; needs a per-tape fps setting.

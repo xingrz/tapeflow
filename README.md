@@ -64,11 +64,11 @@ these external binaries on PATH:
 
 ## Status
 
-Early. A working **vertical slice** is in place for HDV: pick a working directory → the Python
-sidecar analyses it → the app shows the completeness verdict, the re-capture list, and the captures
-(deliberately plain for now). Run it in dev with `cd app && npm install && npm run dev` (needs
-`python3` on PATH; engines load from the pinned submodules automatically).
+Early. A working **vertical slice** is in place for **both HDV and DV**: pick a working directory →
+the Python sidecar analyses it (HDV via hdvmerge, DV via dvmerge→dvrescue) → the app shows the
+completeness verdict, the re-capture list, and the captures (deliberately plain for now). Run it in
+dev with `cd app && npm install && npm run dev` (needs `python3` on PATH, plus `dvrescue` for DV;
+engines load from the pinned submodules automatically).
 
-Next: the Canvas tape-map UI, the DV path (via `dvrescue`), export of the merged file, damage-frame
-thumbnails, and drag-drop ingest. See [AGENTS.md](AGENTS.md) for the architecture and the
-`tapeflow.analysis/1` contract.
+Next: the Canvas tape-map UI, export of the merged file, damage-frame thumbnails, and drag-drop
+ingest. See [AGENTS.md](AGENTS.md) for the architecture and the `tapeflow.analysis/1` contract.
