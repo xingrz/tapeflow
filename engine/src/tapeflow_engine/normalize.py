@@ -218,8 +218,10 @@ def _dv_damage(dv, fps):
             "coverage": cover,
             "copies": len(cover),
             "severity": sev,
-            # dvrescue spans are already the actual damaged extent (no 2 s over-bridging like HDV)
-            "runs": [{"tcStart": sp["tc0"], "tcEnd": sp["tc1"]}],
+            # the actual scattered damaged sub-runs (the span bridges short clean gaps for the cue,
+            # but the map should show the real damage so it lines up with the per-capture lanes)
+            "runs": ([{"tcStart": r["tc0"], "tcEnd": r["tc1"]} for r in sp.get("runs", [])]
+                     or [{"tcStart": sp["tc0"], "tcEnd": sp["tc1"]}]),
         })
     return out
 
