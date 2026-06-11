@@ -1,0 +1,6 @@
+[submodule "engines/hdvmerge"]
+	path = engines/hdvmerge
+	url = https://github.com/xingrz/hdvmerge.git
+[submodule "engines/dvmerge"]
+	path = engines/dvmerge
+	url = https://github.com/xingrz/dvmerge.git
