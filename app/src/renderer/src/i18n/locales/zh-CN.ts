@@ -9,11 +9,16 @@ export default {
     resizeRecapture: '调整补采面板大小',
     showCaptures: '展开采集面板',
     showRecapture: '展开补采面板',
-    settings: '设置'
+    settings: '设置',
+    revealDir: '在文件管理器中打开'
   },
   settings: {
     title: '设置',
     language: '语言',
+    tools: '外部工具',
+    toolsHint: 'PATH 中找到的可选程序。ffmpeg 用于缩略图与 HDV 解码校验；dvrescue 是 DV 合并的必需项。',
+    toolPresent: '已安装',
+    toolMissing: '未找到',
     close: '关闭'
   },
   lang: {
@@ -121,7 +126,6 @@ export default {
   },
   map: {
     title: '磁带图',
-    help: '拖动平移；Shift/Command/Ctrl + 滚轮缩放。',
     axisFallback: '部分时间码缺失，布局回退到引擎坐标轴。',
     result: '结果',
     tapeTcClock: '磁带时间码 / 时钟',

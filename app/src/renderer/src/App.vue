@@ -6,21 +6,21 @@ import {
   ChevronsLeft,
   ChevronsUp,
   Download,
+  ExternalLink,
   FolderOpen,
   HardDrive,
   Loader2,
   RefreshCw,
   Settings,
   UploadCloud,
-  X,
-  XCircle
+  X
 } from '@lucide/vue'
 import BuildPanel from './components/BuildPanel.vue'
 import CaptureTable from './components/CaptureTable.vue'
 import DamageSidebar from './components/DamageSidebar.vue'
 import TapeMap from './components/TapeMap.vue'
 import { useWorkflowStore, type DamageView } from './stores/workflow'
-import { formatDurationFrames, shortPath } from './utils/format'
+import { formatDurationFrames } from './utils/format'
 import { LANG_PREFS, langPref, setLangPref, type LangPref } from './i18n'
 
 const workflow = useWorkflowStore()
@@ -29,6 +29,24 @@ const langChoice = ref<LangPref>(langPref())
 function applyLang(): void {
   setLangPref(langChoice.value)
 }
+
+// just the workspace folder's own name (the full path is the tooltip) — the topbar shows this
+// centred instead of a long, cramped path
+const dirName = computed(() => {
+  const d = workflow.dir
+  if (!d) return ''
+  const parts = d.split(/[\\/]/).filter(Boolean)
+  return parts[parts.length - 1] || d
+})
+
+// external tools (ffmpeg / dvrescue) and their detected versions, for the Settings dialog
+const toolList = computed(() =>
+  Object.entries(workflow.caps?.tools ?? {}).map(([name, info]) => ({
+    name,
+    present: info.present,
+    version: info.version
+  }))
+)
 const dragActive = ref(false)
 const tapeMapRef = ref<InstanceType<typeof TapeMap> | null>(null)
 const workspaceRef = ref<HTMLElement | null>(null)
@@ -164,59 +182,38 @@ function clamp(value: number, min: number, max: number): number {
     @drop="onDrop"
   >
     <header class="topbar">
-      <div class="brand">
-        <div class="brand-mark">tf</div>
-        <div>
-          <h1>tapeflow</h1>
-          <p>{{ $t('app.subtitle') }}</p>
-        </div>
+      <div class="topbar-actions" aria-label="Workspace actions">
+        <button class="icon-button accent" type="button" :title="$t('app.chooseDir')" :disabled="workflow.busy" @click="workflow.pickDir">
+          <FolderOpen :size="16" />
+        </button>
+        <button class="icon-button" type="button" :title="$t('app.reAnalyse')" :disabled="!workflow.dir || workflow.busy" @click="workflow.analyze">
+          <RefreshCw :size="16" />
+        </button>
+        <button class="icon-button" type="button" :title="$t('app.exportMerged')" :disabled="!workflow.canExport" @click="workflow.exportMerged">
+          <Download :size="16" />
+        </button>
       </div>
 
-      <section class="action-bar" aria-label="Workspace actions">
-        <button class="primary-action" type="button" :disabled="workflow.busy" @click="workflow.pickDir">
-          <FolderOpen :size="15" />
-          {{ $t('app.chooseDir') }}
-        </button>
-        <button class="tool-button" type="button" :disabled="!workflow.dir || workflow.busy" @click="workflow.analyze">
-          <RefreshCw :size="15" />
-          {{ $t('app.reAnalyse') }}
-        </button>
-        <button
-          class="tool-button"
-          type="button"
-          :disabled="!workflow.canExport"
-          @click="workflow.exportMerged"
-        >
-          <Download :size="15" />
-          {{ $t('app.exportMerged') }}
-        </button>
-        <div class="path-chip">
-          <HardDrive :size="14" />
-          <span>{{ shortPath(workflow.dir) }}</span>
-        </div>
-        <div v-if="workflow.progressText" class="progress-chip">{{ workflow.progressText }}</div>
-        <button class="icon-button" type="button" :title="$t('app.settings')" @click="settingsOpen = true">
-          <Settings :size="15" />
-        </button>
-      </section>
+      <div class="topbar-center">
+        <template v-if="workflow.busy && workflow.progressText">
+          <Loader2 :size="14" class="spin" />
+          <span class="center-progress">{{ workflow.progressText }}</span>
+        </template>
+        <template v-else-if="workflow.dir">
+          <span class="path-name" :title="workflow.dir">
+            <HardDrive :size="13" />
+            {{ dirName }}
+          </span>
+          <button class="icon-button ghost" type="button" :title="$t('app.revealDir')" @click="workflow.revealDir">
+            <ExternalLink :size="14" />
+          </button>
+        </template>
+      </div>
 
-      <div v-if="workflow.caps" class="cap-strip" aria-label="Capabilities">
-        <span class="cap-chip" :class="{ ok: workflow.caps.engines.hdvmerge }">
-          <component :is="workflow.caps.engines.hdvmerge ? CheckCircle2 : XCircle" :size="14" />
-          hdvmerge
-        </span>
-        <span class="cap-chip" :class="{ ok: workflow.caps.engines.dvmerge }">
-          <component :is="workflow.caps.engines.dvmerge ? CheckCircle2 : XCircle" :size="14" />
-          dvmerge
-        </span>
-        <span class="cap-chip" :class="{ ok: workflow.caps.tools.ffmpeg }">
-          <component :is="workflow.caps.tools.ffmpeg ? CheckCircle2 : AlertTriangle" :size="14" />
-          ffmpeg
-        </span>
-        <span class="cap-chip" :class="{ ok: workflow.caps.tools.dvrescue }">
-          <component :is="workflow.caps.tools.dvrescue ? CheckCircle2 : AlertTriangle" :size="14" />
-          dvrescue
-        </span>
+      <div class="topbar-end">
+        <button class="icon-button" type="button" :title="$t('app.settings')" @click="settingsOpen = true">
+          <Settings :size="16" />
+        </button>
       </div>
     </header>
 
@@ -365,6 +362,20 @@ function clamp(value: number, min: number, max: number): number {
                 <input v-model="langChoice" type="radio" :value="p" @change="applyLang" />
                 <span>{{ $t(`lang.${p}`) }}</span>
               </label>
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <span class="setting-label">{{ $t('settings.tools') }}</span>
+            <p class="setting-hint">{{ $t('settings.toolsHint') }}</p>
+            <div class="tool-list">
+              <div v-for="tool in toolList" :key="tool.name" class="tool-line">
+                <span class="tool-name">{{ tool.name }}</span>
+                <span class="tool-ver" :class="{ missing: !tool.present }">
+                  <component :is="tool.present ? CheckCircle2 : AlertTriangle" :size="13" />
+                  {{ tool.present ? (tool.version || $t('settings.toolPresent')) : $t('settings.toolMissing') }}
+                </span>
+              </div>
             </div>
           </div>
         </div>

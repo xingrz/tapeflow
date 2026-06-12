@@ -81,10 +81,15 @@ export interface TapeAnalysis {
   divergences: unknown[]
 }
 
+export interface ToolInfo {
+  present: boolean
+  version: string | null
+}
+
 export interface Capabilities {
   version: string
   engines: Record<string, boolean>
-  tools: Record<string, boolean>
+  tools: Record<string, ToolInfo>
 }
 
 export interface Progress {

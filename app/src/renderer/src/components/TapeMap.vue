@@ -805,10 +805,7 @@ function clamp(value: number, min: number, max: number): number {
     <div class="panel-title-row">
       <div>
         <h2>{{ $t('map.title') }}</h2>
-        <p>
-          {{ $t('map.help') }}
-          <span v-if="axisFallback">{{ $t('map.axisFallback') }}</span>
-        </p>
+        <p v-if="axisFallback" class="axis-warning">{{ $t('map.axisFallback') }}</p>
       </div>
       <div class="map-controls" aria-label="Map controls">
         <button class="icon-button" type="button" :title="$t('map.zoomOut')" @click="zoomBy(1.25)">

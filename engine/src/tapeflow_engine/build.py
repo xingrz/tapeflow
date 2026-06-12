@@ -8,6 +8,7 @@ The result reports the output path and, for HDV, a structured ``verify`` summary
 reassuring green check (or a warning when a knowingly-damaged merge is exported).
 """
 
+import inspect
 import os
 import shutil
 
@@ -100,15 +101,24 @@ def _build_dv(directory, files, output, notify):
     from dvmerge import run as dvrun
 
     cache_dir = os.path.join(directory, ".tapeflow", "dvmerge")
-    total = _dv_total_frames(files, cache_dir, dvrun)
+    # Older dvmerge builds don't accept on_progress; passing it would crash the whole export. Detect
+    # support and degrade to a determinate-less "building" notice rather than failing.
+    supports_progress = "on_progress" in inspect.signature(dvrun.analyze).parameters
+    total = _dv_total_frames(files, cache_dir, dvrun) if supports_progress else 0
 
     def on_prog(done):
         if notify:
             notify("progress", {"phase": "building", "tool": "dvrescue", "done": done, "total": total})
 
     if notify:
-        notify("progress", {"phase": "building", "tool": "dvrescue", "total": total})
-    dvrun.analyze(files, output=output, cache_dir=cache_dir, on_progress=on_prog)
+        start = {"phase": "building", "tool": "dvrescue"}
+        if supports_progress:
+            start["total"] = total
+        notify("progress", start)
+    if supports_progress:
+        dvrun.analyze(files, output=output, cache_dir=cache_dir, on_progress=on_prog)
+    else:
+        dvrun.analyze(files, output=output, cache_dir=cache_dir)
     return {
         "output": output,
         "format": "dv",

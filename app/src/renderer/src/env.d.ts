@@ -13,6 +13,7 @@ declare global {
     api: {
       pickDir: () => Promise<string | null>
       pickSave: (defaultName?: string) => Promise<string | null>
+      revealDir: (dir: string) => Promise<void>
       capabilities: () => Promise<Capabilities>
       analyze: (dir: string) => Promise<TapeAnalysis>
       build: (dir: string, output: string) => Promise<BuildResult>

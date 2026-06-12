@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import { copyFile, mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises'
 import { basename, extname, join, parse, resolve } from 'node:path'
 import { Sidecar } from './sidecar'
@@ -97,6 +97,8 @@ app.whenReady().then(() => {
     const r = await dialog.showSaveDialog(win!, { defaultPath: defaultName })
     return r.canceled ? null : (r.filePath ?? null)
   })
+  // Open the workspace folder in the OS file manager (Finder / Explorer / Files).
+  ipcMain.handle('revealDir', (_e, dir: string) => shell.openPath(dir))
   ipcMain.handle('capabilities', () => sidecar!.call('capabilities'))
   ipcMain.handle('analyze', (_e, dir: string) => sidecar!.call('analyze', { dir }, onProgress))
   ipcMain.handle('build', (_e, dir: string, output: string) =>

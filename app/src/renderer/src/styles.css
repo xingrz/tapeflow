@@ -190,83 +190,56 @@ code,
   padding-right: 144px; /* Windows/Linux window-controls overlay */
 }
 
-.brand {
+.topbar-actions {
   display: flex;
   align-items: center;
-  min-width: 0;
-  gap: 8px;
+  gap: 5px;
 }
 
-.brand-mark {
-  display: grid;
-  width: 28px;
-  height: 28px;
-  place-items: center;
-  border-radius: 4px;
-  background: var(--primary-bg);
-  color: var(--primary-text);
-  font-size: 11px;
-  font-weight: 800;
-}
-
-.brand h1 {
-  margin: 0;
-  font-size: 16px;
-  line-height: 1.05;
-  color: var(--text-strong);
-}
-
-.brand p {
-  margin: 1px 0 0;
-  color: var(--text-muted);
-  font-size: 11px;
-  line-height: 1.1;
-  white-space: nowrap;
-}
-
-.action-bar {
+.topbar-center {
   display: flex;
   align-items: center;
-  flex: 1 1 auto;
-  min-width: 0;
+  justify-content: center;
   gap: 6px;
+  min-width: 0;
+  color: var(--text-muted);
 }
 
-.cap-strip {
+.topbar-end {
   display: flex;
-  flex: 0 0 auto;
-  flex-wrap: nowrap;
+  align-items: center;
   justify-content: flex-end;
-  gap: 4px;
 }
 
-.cap-chip,
-.path-chip,
-.progress-chip {
+.path-name {
   display: inline-flex;
   align-items: center;
-  min-height: 24px;
-  gap: 5px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background: var(--surface-raised);
-  color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 650;
-  padding: 3px 7px;
+  gap: 6px;
+  min-width: 0;
+  max-width: 360px;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--text);
 }
 
-.cap-chip.ok {
+.path-name svg {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+}
+
+.center-progress {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 460px;
+  font-size: 12px;
   color: var(--accent);
 }
 
-.cap-chip:not(.ok) {
-  color: var(--warn);
-}
-
 .primary-action,
-.tool-button,
 .plain-action,
 .tc-copy,
 .icon-button {
@@ -294,38 +267,35 @@ code,
   background: var(--primary-bg-hover);
 }
 
-.tool-button {
-  border: 1px solid var(--border-strong);
-  background: var(--surface-raised);
-  color: var(--text);
-  font-size: 12px;
-  font-weight: 700;
-  padding: 4px 8px;
-}
-
-.tool-button:not(:disabled):hover,
 .icon-button:not(:disabled):hover,
 .plain-action:not(:disabled):hover {
   background: var(--hover);
 }
 
-.path-chip {
-  flex: 1 1 220px;
-  min-width: 120px;
-  max-width: 440px;
-  color: var(--text-muted);
-}
-
-.path-chip span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.progress-chip {
-  flex: 0 0 auto;
+/* the choose-directory action — the one primary control left in the (now icon-only) topbar */
+.icon-button.accent {
   border-color: var(--accent-border);
   background: var(--accent-bg);
   color: var(--accent);
+}
+
+.icon-button.accent:not(:disabled):hover {
+  border-color: var(--accent);
+  background: var(--accent-bg);
+}
+
+/* the borderless reveal-in-file-manager button sitting next to the centred path */
+.icon-button.ghost {
+  width: 24px;
+  min-height: 24px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.icon-button.ghost:not(:disabled):hover {
+  color: var(--text);
+  background: var(--hover);
 }
 
 .modal-overlay {
@@ -400,6 +370,54 @@ code,
 
 .radio-option input {
   accent-color: var(--accent);
+}
+
+.setting-row + .setting-row {
+  margin-top: 16px;
+}
+
+.setting-hint {
+  margin: -2px 0 2px;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.tool-list {
+  display: grid;
+  gap: 1px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  overflow: hidden;
+  background: var(--border);
+}
+
+.tool-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: var(--surface-raised);
+  padding: 7px 10px;
+  font-size: 12px;
+}
+
+.tool-name {
+  font-weight: 650;
+  color: var(--text);
+}
+
+.tool-ver {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", ui-monospace, monospace;
+  color: var(--accent);
+}
+
+.tool-ver.missing {
+  color: var(--warn);
+  font-family: inherit;
 }
 
 .error-banner {
@@ -655,6 +673,10 @@ code,
   overflow: hidden;
 }
 
+.axis-warning {
+  color: var(--warn);
+}
+
 .map-controls {
   display: flex;
   gap: 4px;
@@ -872,6 +894,22 @@ code,
   height: 100%;
   min-height: 0;
   overflow: hidden;
+}
+
+/* the captures header stacks a title, a status pill and a lane/segment line — top-align the
+   collapse button to the title and give the rows vertical breathing room (they were cramped). */
+.capture-panel .panel-title-row {
+  align-items: flex-start;
+  padding: 8px 10px;
+}
+
+.capture-panel .heading-line {
+  min-height: 19px;
+  gap: 9px;
+}
+
+.capture-panel .panel-title-row p {
+  margin-top: 5px;
 }
 
 .table-wrap {

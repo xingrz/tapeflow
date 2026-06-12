@@ -9,11 +9,16 @@ export default {
     resizeRecapture: 'Resize re-capture panel',
     showCaptures: 'Show captures',
     showRecapture: 'Show re-capture',
-    settings: 'Settings'
+    settings: 'Settings',
+    revealDir: 'Reveal in file manager'
   },
   settings: {
     title: 'Settings',
     language: 'Language',
+    tools: 'External tools',
+    toolsHint: 'Optional binaries found on PATH. ffmpeg powers thumbnails and HDV decode checks; dvrescue is required for DV.',
+    toolPresent: 'installed',
+    toolMissing: 'not found',
     close: 'Close'
   },
   lang: {
@@ -121,7 +126,6 @@ export default {
   },
   map: {
     title: 'Tape map',
-    help: 'Drag to pan. Shift/Command/Ctrl + wheel zooms.',
     axisFallback: 'Some TC labels are missing, so layout falls back to engine axis.',
     result: 'Result',
     tapeTcClock: 'Tape TC / clock',

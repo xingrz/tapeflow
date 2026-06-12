@@ -5,6 +5,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 contextBridge.exposeInMainWorld('api', {
   pickDir: () => ipcRenderer.invoke('pickDir'),
   pickSave: (defaultName?: string) => ipcRenderer.invoke('pickSave', defaultName),
+  revealDir: (dir: string) => ipcRenderer.invoke('revealDir', dir),
   capabilities: () => ipcRenderer.invoke('capabilities'),
   analyze: (dir: string) => ipcRenderer.invoke('analyze', dir),
   build: (dir: string, output: string) => ipcRenderer.invoke('build', dir, output),

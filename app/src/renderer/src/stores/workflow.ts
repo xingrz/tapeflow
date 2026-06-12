@@ -216,6 +216,10 @@ export const useWorkflowStore = defineStore('workflow', () => {
     buildResult.value = null
   }
 
+  async function revealDir(): Promise<void> {
+    if (dir.value) await window.api.revealDir(dir.value)
+  }
+
   async function ingestFiles(files: File[]): Promise<void> {
     if (!dir.value) {
       error.value = t('errors.chooseDirFirst')
@@ -394,6 +398,7 @@ export const useWorkflowStore = defineStore('workflow', () => {
     analyze,
     exportMerged,
     dismissBuildResult,
+    revealDir,
     ingestFiles,
     setAccepted,
     selectDamage,
