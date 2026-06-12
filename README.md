@@ -36,6 +36,23 @@ it from there.)
    the map turn from red to green.
 4. **Export** the finished, merged video.
 
+## Download
+
+Grab the latest build for your platform from the
+[**Releases**](https://github.com/xingrz/tapeflow/releases) page:
+
+- **macOS** — `.dmg` (pick `arm64` for Apple Silicon, `x64` for Intel Macs)
+- **Windows** — `.exe` installer
+- **Linux** — `.AppImage`
+
+The builds aren't code-signed yet, so your OS will warn on first launch:
+
+- **macOS** — right-click the app and choose **Open** (just the first time); Gatekeeper remembers it
+  afterwards.
+- **Windows** — on the SmartScreen prompt, click **More info → Run anyway**.
+
+You'll also need a tool or two on your PATH — see [Requirements](#requirements).
+
 ## Requirements
 
 The app bundles everything it needs except a couple of external command-line tools, which must be on
