@@ -10,6 +10,7 @@ build/
 node_modules/
 dist/
 out/
+release/
 .vite/
 
 # tapeflow working-directory caches — never commit these

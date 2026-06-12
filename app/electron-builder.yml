@@ -1,0 +1,36 @@
+appId: com.xingrz.tapeflow
+productName: tapeflow
+# A publish provider must be set or electron-builder throws "Cannot read properties of null
+# (reading 'channel')" while generating auto-update metadata — even with `--publish never`. We don't
+# auto-publish from the build job (it uploads artifacts); the release job attaches them on a tag.
+publish:
+  provider: github
+directories:
+  output: release
+  buildResources: build
+# electron-vite emits to out/; main/preload externalize node deps and the renderer is bundled, so
+# the packaged app only needs out/ + the manifest (electron-builder pulls in electron itself).
+files:
+  - out/**/*
+  - package.json
+# the frozen Python sidecar (PyInstaller onedir, with hdvmerge/dvmerge baked in). Built separately
+# in CI to engine/dist/ and copied into the app's resources/. ffmpeg + dvrescue stay external.
+extraResources:
+  - from: ../engine/dist/tapeflow-engine
+    to: tapeflow-engine
+artifactName: ${productName}-${version}-${arch}.${ext}
+mac:
+  target:
+    - dmg
+    - zip
+  category: public.app-category.video
+win:
+  target:
+    - nsis
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+linux:
+  target:
+    - AppImage
+  category: AudioVideo

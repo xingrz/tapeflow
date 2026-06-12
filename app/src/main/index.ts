@@ -9,15 +9,21 @@ let sidecar: Sidecar | null = null
 const HDV_EXTS = new Set(['.m2t', '.m2ts', '.mts', '.ts', '.tts', '.trp', '.tp', '.mpg', '.mpeg'])
 const DV_EXTS = new Set(['.dv', '.dif'])
 
-/**
- * Repo root. In dev `app.getAppPath()` is the `app/` directory, so the root is its parent.
- * (Release will bundle a frozen sidecar binary instead of invoking Python - handled later.)
- */
+/** Repo root. In dev `app.getAppPath()` is the `app/` directory, so the root is its parent. */
 function repoRoot(): string {
   return resolve(app.getAppPath(), '..')
 }
 
 function startSidecar(): void {
+  if (app.isPackaged) {
+    // Release: spawn the frozen sidecar binary bundled under resources/ (PyInstaller onedir with
+    // the engines baked in), so end users need no Python. ffmpeg/dvrescue are still found on PATH.
+    const exe = process.platform === 'win32' ? 'tapeflow-engine.exe' : 'tapeflow-engine'
+    const bin = join(process.resourcesPath, 'tapeflow-engine', exe)
+    sidecar = new Sidecar(bin, [], { env: process.env })
+    return
+  }
+  // Dev: run the sidecar from source via the system Python; _bootstrap adds the engine submodules.
   const root = repoRoot()
   const python = process.env.TAPEFLOW_PYTHON || 'python3'
   sidecar = new Sidecar(python, ['-m', 'tapeflow_engine'], {
@@ -59,11 +65,19 @@ async function listCaptures(dir: string): Promise<object[]> {
 }
 
 function createWindow(): void {
+  const isMac = process.platform === 'darwin'
   win = new BrowserWindow({
     width: 1280,
     height: 820,
     minWidth: 980,
     minHeight: 680,
+    backgroundColor: '#0e1211',
+    // Fuse the system chrome into our dark UI: macOS keeps inset traffic lights over the topbar;
+    // Windows/Linux draw the native min/max/close as an overlay tinted to match the topbar.
+    titleBarStyle: isMac ? 'hiddenInset' : 'hidden',
+    ...(isMac
+      ? {}
+      : { titleBarOverlay: { color: '#0e1211', symbolColor: '#e6ebe8', height: 38 } }),
     webPreferences: { preload: join(__dirname, '../preload/index.js'), sandbox: false }
   })
   if (process.env.ELECTRON_RENDERER_URL) win.loadURL(process.env.ELECTRON_RENDERER_URL)
