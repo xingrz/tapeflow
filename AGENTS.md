@@ -6,9 +6,9 @@ interface**. It is the graphical front-end to two existing command-line engines;
 reinvent the merge and it does not capture from tape.
 
 If you are here to work on the **UI**, read *What it is*, *The unified data model*, and *The UI it
-drives* — that last section is the design intent to build toward; the current UI is deliberately
-plain ("ugly-first") and is yours to make good. Bind the UI to the `tapeflow.analysis/1` contract,
-not to anything engine-specific.
+drives* — that last section is the design intent the renderer now realises (the Canvas tape-map,
+re-capture sidebar, drag-drop ingest, and export are all built; what remains is refinement). Bind
+the UI to the `tapeflow.analysis/1` contract, not to anything engine-specific.
 
 ## What it is
 
@@ -162,7 +162,7 @@ frame-accurate axis unification across formats is a known refinement; until then
 - dvmerge `complete`/`fps` pass through; `spans[]` → `damage[]` (`kind` from span kind: mosaic→
   `dirty`, missing→`missing`; `cover` → `coverage`); `sources[]` → `captures[]`.
 
-## The UI it drives (design intent — build toward this)
+## The UI it drives (design intent — now built)
 
 The CLI engines can only print tables. tapeflow's whole point is to show the **spatial** picture a
 GUI can. **Central insight: the tape is a 1-D timeline, each capture is a clip on it, and damage is
@@ -181,10 +181,11 @@ thousands of GOPs/frames — SVG/DOM would choke; Canvas pans/zooms smoothly).
     not-yet-unified integer (see "Axis semantics"), useful only as a fallback. (Caveat: tape TC is
     *piecewise*-monotonic — a new recording after a gap can restart it; fine for one head-to-tail
     tape, but don't assume global monotonicity.)
-  - **Per-lane interior clean/damaged colouring is not available yet** — `captures[].health` is
-    currently always `[]`. Filling it needs hdvmerge's `--json` to expose per-GOP damage positions
-    (extend its `jsonout` + a lock-step test, bump the pin). Until then, draw **solid lanes** and
-    show damage from the separate `damage[]` list (which is complete and accurate).
+  - **Colour lanes from `damage[]`, not `captures[].health`.** `health` is a legacy run-length
+    field and is always `[]`; the lanes draw their coverage gaps and per-capture damage from the
+    separate `damage[]` list — each spot's `coverage[]` names the captures that touch it, so a lane
+    gets its damaged runs from the spots that list it. That list is complete and accurate; there is
+    no per-GOP `health` track to wait on.
 - **Re-capture sidebar**, synced to the map: each `damage[]` entry as a row — big copyable **tape
   TC** (the deck cue point), wall clock, duration, `kind`, and coverage ("0 copies — must
   re-capture" vs "2 dirty copies — may improve"). Click a row ⇄ highlight on the map.
@@ -205,18 +206,21 @@ thousands of GOPs/frames — SVG/DOM would choke; Canvas pans/zooms smoothly).
 - **Export** — `window.api.pickSave(name)` for a destination, then `window.api.build(dir, output)`
   → `BuildResult`. For HDV it carries a `verify` summary (AUX survived, CC/TEI integrity, decode) —
   surface it as a green check, or a warning when a knowingly-damaged merge is exported; DV has no
-  separate self-check (`verify: null`). A minimal "Export merged…" button already exists in App.vue
-  to prove the path — redesign it.
+  separate self-check (`verify: null`). This is built as `BuildPanel.vue` — pick destination →
+  build with a real progress bar → surface the verify summary.
 
-Ugly-first is fine and expected. Prioritise correct data binding and the tape-map's information
-content; visual polish is the follow-up.
+The renderer realises this intent: dark-themed, internationalised (Auto / English / 简体中文), and
+bound to the `tapeflow.analysis/1` contract. What remains is refinement on a working app, not a
+first build.
 
-**The renderer surface** (`window.api`, brokered by main → sidecar) is typed in
+**The renderer surface** (`window.api`, brokered by main) is typed in
 [app/src/renderer/src/env.d.ts](app/src/renderer/src/env.d.ts) and `types.ts` — bind to those. It
-is: `pickDir` · `pickSave` · `capabilities` · `analyze(dir)` · `build(dir, output)` ·
-`thumbnail(dir, file, seconds)` · `ingest(dir, srcPaths)` · `onProgress(cb)`. All long jobs stream
-`progress` notifications through `onProgress`. The renderer never touches the filesystem or the
-sidecar directly.
+is: `pickDir` · `pickSave` · `revealDir` · `capabilities` · `analyze(dir)` · `build(dir, output)` ·
+`thumbnail(dir, file, seconds)` · `listCaptures(dir)` · `ingest(dir, srcPaths)` · `loadState(dir)` /
+`saveState(dir, state)` · `onProgress(cb)`. Only `capabilities`/`analyze`/`build`/`thumbnail`
+forward to the sidecar; the rest (dir/save pickers, reveal, capture listing, ingest copy, checklist
+state) are handled in Electron main. All long jobs stream `progress` notifications through
+`onProgress`. The renderer never touches the filesystem or the sidecar directly.
 
 ## Tech stack (decided)
 
@@ -243,12 +247,13 @@ tapeflow/
   engines/            git submodules, pinned (consumed via --json, never edited here)
     hdvmerge/  dvmerge/
   engine/             Python sidecar: JSON-RPC loop, format routing, normalisation
-    src/tapeflow_engine/  rpc.py · methods.py · analyze.py · normalize.py · _bootstrap.py
-    tests/                test_rpc.py · test_normalize.py
+    src/tapeflow_engine/  rpc.py · methods.py · analyze.py · normalize.py · build.py · thumb.py · _bootstrap.py
+    tests/                test_rpc.py · test_normalize.py · test_actions.py
   app/               Electron + Vue: main (Node) + renderer (Vue), the UI
     src/main/             index.ts (window + IPC) · sidecar.ts (JSON-RPC client)
     src/preload/          index.ts (contextBridge -> window.api)
-    src/renderer/src/     App.vue · types.ts (the tapeflow.analysis/1 TS types)
+    src/renderer/src/     App.vue · components/ (TapeMap, DamageSidebar, CaptureTable, BuildPanel, …)
+                          stores/workflow.ts · utils/ · i18n/ · types.ts (the tapeflow.analysis/1 TS types)
   AGENTS.md  README.md
 ```
 
@@ -296,20 +301,22 @@ It is a polyglot monorepo, but needs no monorepo tool — `app/` has its own `pa
 
 ## Status
 
-**Backend is contract-complete; ready for the UI handoff.** The sidecar serves the full method set
-over JSON-RPC — `capabilities`, `analyze` (HDV + DV, both verified on real tapes), `build` (export:
-HDV lossless byte-concat + self-check, DV keeps dvrescue's merge), `thumbnail` (ffmpeg frame → PNG)
-— and Electron main brokers them to a typed `window.api` (including drag-drop `ingest`). The Vue app
-is the plain ugly-first placeholder (verdict + lists + a minimal export button); making it good —
-above all the **Canvas tape-map** — is the UI agent's job. The app builds and typechecks; the
-sidecar has unit tests + verified smokes.
+**Working end to end for both HDV and DV — backend and UI are both built.** The sidecar serves the
+full method set over JSON-RPC — `capabilities` (engine imports + ffmpeg/dvrescue presence and
+versions), `analyze` (HDV + DV, both verified on real tapes), `build` (export: HDV lossless
+byte-concat + self-check, DV keeps dvrescue's merge), `thumbnail` (ffmpeg frame → PNG) — and
+Electron main brokers them, alongside its own filesystem/state handlers, to a typed `window.api`.
+The Vue renderer realises *The UI it drives*: the Canvas **tape-map** (dual TC/wall-clock ruler,
+per-capture lanes, best-of result track), the synced **re-capture sidebar** with damage thumbnails
+and accept-as-unrecoverable, **drag-drop ingest**, the persisted `.tapeflow/state.json` checklist,
+a dark theme, and i18n (Auto / English / 简体中文). **Cross-platform packaging** — a
+PyInstaller-frozen sidecar bundled by electron-builder on a GitHub Actions matrix — is wired. The
+app builds and typechecks; the sidecar has unit tests + verified smokes.
 
-**Remaining (UI agent unless noted):**
-- the **Canvas tape-map** — the hero view (position by TC, see "The UI it drives");
-- **drag-drop UI** (the `ingest` API + main handler exist; needs the renderer drop zone) and the
-  `.tapeflow/state.json` re-capture checklist (outstanding / covered / accepted);
-- per-capture `health` runs for tape-map lane colouring — **engine work**: hdvmerge's `--json` must
-  expose per-GOP damage positions (extend `jsonout` + a lock-step test, bump the pin); v1 draws
-  solid lanes without it;
-- **NTSC DV** — **engine/sidecar work**: the sidecar defaults to PAL 25 fps; needs a per-tape fps
-  setting.
+**Known refinements:**
+- **Cross-format axis unification** — `axis` is per-engine (GOP index vs tape frame) and only "good
+  enough for drawing bars in order"; `tc`/`rec` stay the source of truth (see *Axis semantics*).
+  Frame-accurate unification across formats is still open.
+- **NTSC drop-frame labels** — `fps` now flows through from each engine (no PAL hard-coding), but
+  `_tc_frames` uses non-drop arithmetic: exact for PAL, with small *label* drift on NTSC drop-frame
+  timecodes. Layout is unaffected (axis is opaque); precise NTSC TC labelling is a refinement.

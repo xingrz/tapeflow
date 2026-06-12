@@ -1,76 +1,66 @@
 # tapeflow
 
-A cross-platform (Windows / Linux / macOS) GUI for the **DV and HDV tape-capture merge
-workflow** — both formats in one interface. You point it at a working directory of overlapping
-captures of a worn tape; it analyses them, tells you whether they merge into a complete video,
-and lists the damaged spots that still need re-capturing — each cued by the tape's SMPTE
-timecode (to find it on the deck) and the camera's wall-clock recording time. Re-capture those
-spots on your old deck, drop the new files in, re-analyse; the list shrinks. When complete,
-export the merged file.
+![tapeflow's tape-map — one lane per capture, a best-of result track on top, the re-capture sidebar on the right](screenshot.png)
 
-tapeflow does **not** capture (modern hardware can't) and does **not** reinvent the merge. It
-drives two existing engines and unifies their output behind one UI.
+A cross-platform (Windows / Linux / macOS) desktop app for rescuing old **DV and HDV camcorder
+tapes** — both formats in one interface. Capture a worn tape a few times, drop the files in, and
+tapeflow works out how they combine into one complete video and tells you exactly what's still
+damaged.
 
-## How it's put together
+## Why
 
-```
-tapeflow/
-  engines/
-    hdvmerge/   ← git submodule (pinned)   HDV / Sony MPEG-TS (.m2t): the merge engine itself
-    dvmerge/    ← git submodule (pinned)   DV (.dv): a layer over the `dvrescue` CLI
-  engine/       (planned)  Python sidecar: imports the two engines, normalises their `--json`
-                           output into one model, speaks JSON-RPC over stdio
-  app/          (planned)  Electron front-end: the tape-map UI, drag-drop ingest, export
-```
+Magnetic tape doesn't age gracefully. A worn DV or HDV tape rarely plays back cleanly from start to
+finish in one pass — dropouts and mistracking leave glitches, and they fall in *different* places
+each time the tape runs. So the way to rescue one is to capture it several times over: every pass is
+a slightly different, slightly broken copy, but between them they tend to cover the whole tape, with
+the clean frames simply scattered across different files.
 
-The engines are pulled in as **git submodules pinned to a specific commit**, so a checkout is
-reproducible and an engine's later evolution can never silently reach tapeflow's build until the
-pin is deliberately bumped. tapeflow consumes each engine through its structured `--json`
-contract (`hdvmerge.analysis/1`, `dvmerge.analysis/1`) — never by scraping the human Markdown.
-The engines remain independent, standalone projects:
+Reassembling those passes into one good video by hand is the tedious part — for every damaged moment
+you have to hunt down which capture happens to hold a clean copy, splice it in, and keep track of
+whatever no pass managed to read at all. tapeflow does that bookkeeping. Point it at your captures
+and it tells you, at a glance, whether they already add up to a complete video — and if not, exactly
+which spots still need another pass on the deck.
 
-- hdvmerge — https://github.com/xingrz/hdvmerge
-- dvmerge — https://github.com/xingrz/dvmerge
+(It can't capture *for* you: modern computers no longer have the FireWire hardware to pull DV/HDV
+off a tape, so you still capture on an old camcorder or deck and copy the files over. tapeflow takes
+it from there.)
 
-## Working with the repo
+## How it works
 
-Clone **recursively** so the engine submodules come with it — no need to replicate any local
-directory layout:
+1. **Point it at a folder** of captures of one tape — several overlapping passes, each with some
+   damage.
+2. **Analyse.** tapeflow lines the captures up on a tape-map and gives you a verdict: complete, or a
+   list of the spots that still need re-capturing — each one labelled with the tape's **timecode**
+   (to find it on the deck) and the camera's **recording time**.
+3. **Re-capture those spots**, drop the new files in, and re-analyse. The list shrinks; you watch
+   the map turn from red to green.
+4. **Export** the finished, merged video.
 
-```sh
-git clone --recursive https://github.com/xingrz/tapeflow.git
-# already cloned without --recursive?
-git submodule update --init
-```
+## Requirements
 
-Bump an engine to a newer pinned version (after it has been pushed upstream):
+The app bundles everything it needs except a couple of external command-line tools, which must be on
+your PATH:
 
-```sh
-git -C engines/hdvmerge fetch && git -C engines/hdvmerge checkout <commit>
-git add engines/hdvmerge && git commit -m "Bump hdvmerge pin"
-```
+- **[dvrescue](https://mediaarea.net/dvrescue)** (MediaArea/MIPoPS) — required for DV tapes.
+- **[ffmpeg](https://ffmpeg.org/)** — recommended; it powers HDV damage detection and the
+  damaged-frame previews.
 
-> The submodule URLs are HTTPS read-only — tapeflow only ever *consumes* the engines, so anyone
-> (and CI) can clone recursively without SSH keys. Engine development and pushing happen in the
-> standalone engine repos, not here.
+## Built on
 
-## Requirements (end users)
+tapeflow doesn't reinvent the merge — it's a graphical front-end to two existing, open-source
+command-line engines, and it orchestrates and visualises what they do:
 
-The packaged app bundles Python and both engines, so end users install neither. They only need
-these external binaries on PATH:
+- **hdvmerge** — the HDV / Sony MPEG-TS merge engine — https://github.com/xingrz/hdvmerge
+- **dvmerge** — DV, built on the `dvrescue` tool — https://github.com/xingrz/dvmerge
 
-- **dvrescue** (MediaArea/MIPoPS) — required for DV.
-- **ffmpeg** — recommended; powers HDV intra-frame damage detection and damage-frame thumbnails.
+## Development
 
-## Status
+An Electron + Vue front-end over a Python engine, with the two merge engines pinned in as git
+submodules. To hack on it: clone recursively (`git clone --recursive …`), then `cd app && npm
+install && npm run dev`. The architecture, data contract, and engine mechanics are in
+[AGENTS.md](AGENTS.md).
 
-Early, but the **backend is contract-complete for both HDV and DV**: pick a working directory → the
-Python sidecar analyses it (HDV via hdvmerge, DV via dvmerge→dvrescue), can **export** the merged
-file, and serves **damage-frame thumbnails** — all over JSON-RPC, brokered to a typed `window.api`.
-The Vue UI is a deliberately plain placeholder (verdict + lists + a minimal export button). Run it
-in dev with `cd app && npm install && npm run dev` (needs `python3` on PATH, plus `dvrescue` for DV;
-engines load from the pinned submodules automatically).
+## License
 
-Next (mostly UI): the **Canvas tape-map** (the hero view), drag-drop ingest, and the re-capture
-checklist. See [AGENTS.md](AGENTS.md) for the architecture, the `tapeflow.analysis/1` contract, and
-the `window.api` surface.
+[MIT](LICENSE) © XiNGRZ. The bundled engines [hdvmerge](https://github.com/xingrz/hdvmerge) and
+[dvmerge](https://github.com/xingrz/dvmerge) are MIT too.
