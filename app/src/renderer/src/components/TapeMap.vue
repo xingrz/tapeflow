@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { Minus, Plus, Scan } from '@lucide/vue'
 import type { Capture, CaptureDamage, DamageSpot, TapeAnalysis } from '../types'
 import type { DamageView } from '../stores/workflow'
-import { recordingTimeAt, secondsToTc, tcToSeconds } from '../utils/timecode'
+import { parseRecordingTime, recordingTimeAt, secondsToTc, tcToSeconds } from '../utils/timecode'
 
 type DomainMode = 'tc' | 'axis'
 
@@ -394,6 +394,59 @@ function drawSelectionEdges(ctx: CanvasRenderingContext2D, y0: number, y1: numbe
   ctx.restore()
 }
 
+// The (tape TC -> wall clock) curve as numbers, parsed once per analysis: tc seconds + epoch ms,
+// sorted by tc. The wall clock is non-linear (jumps at pauses / different-day footage), so the ruler
+// reads it per position from this curve instead of extrapolating from one anchor.
+const recAnchors = computed(() => {
+  const fps = props.analysis.fps
+  const pts: Array<{ tc: number; ms: number }> = []
+  for (const a of props.analysis.tape.recAnchors ?? []) {
+    const tc = tcToSeconds(a.tc, fps)
+    const d = parseRecordingTime(a.rec)
+    if (tc != null && d) pts.push({ tc, ms: d.getTime() })
+  }
+  pts.sort((p, q) => p.tc - q.tc)
+  return pts
+})
+
+// Wall-clock label at a tape-TC position, interpolated from the curve. Snaps across a discontinuity
+// (rec going backward = footage from another day, or a >1h forward gap = a long pause) so it never
+// invents impossible in-between times. Falls back to the old linear extrapolation when there is no
+// curve (e.g. DV).
+function recLabelAt(tcSeconds: number): string | null {
+  const pts = recAnchors.value
+  if (!pts.length) {
+    return recordingTimeAt(
+      tcSeconds,
+      tcToSeconds(props.analysis.tape.tcStart, props.analysis.fps),
+      props.analysis.tape.recStart
+    )
+  }
+  if (tcSeconds <= pts[0].tc) return fmtRec(pts[0].ms)
+  if (tcSeconds >= pts[pts.length - 1].tc) return fmtRec(pts[pts.length - 1].ms)
+  let lo = 0
+  let hi = pts.length - 1
+  while (lo + 1 < hi) {
+    const mid = (lo + hi) >> 1
+    if (pts[mid].tc <= tcSeconds) lo = mid
+    else hi = mid
+  }
+  const a = pts[lo]
+  const b = pts[hi]
+  const dMs = b.ms - a.ms
+  if (dMs < 0 || dMs > 3_600_000) {
+    return fmtRec(tcSeconds - a.tc <= b.tc - tcSeconds ? a.ms : b.ms) // snap to the nearer side
+  }
+  const f = b.tc > a.tc ? (tcSeconds - a.tc) / (b.tc - a.tc) : 0
+  return fmtRec(a.ms + f * dMs)
+}
+
+function fmtRec(ms: number): string {
+  const d = new Date(ms)
+  const p = (n: number): string => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+}
+
 function drawRuler(ctx: CanvasRenderingContext2D): void {
   const plot = plotRect()
   const span = viewMax.value - viewMin.value
@@ -401,7 +454,6 @@ function drawRuler(ctx: CanvasRenderingContext2D): void {
   const targetTicks = Math.max(2, Math.floor(plot.w / labelWidth))
   const step = niceStep(span / targetTicks)
   const start = Math.ceil(viewMin.value / step) * step
-  const tcStart = tcToSeconds(props.analysis.tape.tcStart, props.analysis.fps)
 
   ctx.strokeStyle = colors.grid
   ctx.lineWidth = 1
@@ -426,9 +478,7 @@ function drawRuler(ctx: CanvasRenderingContext2D): void {
     ctx.fillStyle = colors.tcText
     ctx.fillText(tcLabel, clampedLabelX(ctx, tcLabel, x + 5, plot.x, plot.x + plot.w), 9)
 
-    const rec = domain.value.mode === 'tc'
-      ? recordingTimeAt(v, tcStart, props.analysis.tape.recStart)
-      : null
+    const rec = domain.value.mode === 'tc' ? recLabelAt(v) : null
     if (rec && plot.w >= 340) {
       const recLabel = rec.slice(11)
       ctx.fillStyle = colors.recText

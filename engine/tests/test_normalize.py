@@ -33,6 +33,8 @@ def _hdv(residuals=(), gaps=(), unused=(), complete=True, bad_seams=0):
         "divergences": [],
         "gaps": list(gaps),
         "unused_sources": list(unused),
+        "rec_curve": [{"tc": "07:00:00:00", "rec": "2007-01-01 09:00:00"},
+                      {"tc": "07:00:49:24", "rec": "2007-01-01 09:00:49"}],
     }
 
 
@@ -51,6 +53,8 @@ class TestNormalizeHdv(unittest.TestCase):
         self.assertEqual(d["summary"]["recaptureSpots"], 0)
 
         self.assertEqual(d["tape"]["durationFrames"], 200)
+        self.assertEqual(d["tape"]["recAnchors"][0],
+                         {"tc": "07:00:00:00", "rec": "2007-01-01 09:00:00"})  # rec curve passthrough
         self.assertEqual(d["tape"]["tcStart"], "07:00:00:00")
         self.assertEqual(d["tape"]["tcEnd"], "07:00:49:24")
         # title is only a *separator*-delimited shared prefix (like hdvmerge's report); capA/capB

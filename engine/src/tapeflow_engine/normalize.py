@@ -197,6 +197,9 @@ def from_hdvmerge(hdv, working_dir, files_by_tag):
         "recEnd": segs[-1].get("rec_end") if segs else None,
         "durationFrames": hdv["total_frames"],
         "title": _title([s["tag"] for s in sources]),
+        # per-position (tape TC -> wall clock) curve so the map shows each position's true recording
+        # time instead of extrapolating from recStart (which a stray/older head chunk would poison)
+        "recAnchors": hdv.get("rec_curve") or [],
     }
     return {
         "schema": SCHEMA,
@@ -324,6 +327,7 @@ def from_dvmerge(dv, working_dir, files_by_tag):
             "recStart": dv["rdt0"], "recEnd": dv["rdt1"],
             "durationFrames": dv["total_frames"],
             "title": _title(dv["files"]),
+            "recAnchors": [],   # DV merges frame-by-frame; no per-position rec curve (uses recStart)
         },
         "summary": {
             "recaptureSpots": len(damage),

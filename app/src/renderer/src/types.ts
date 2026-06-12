@@ -69,6 +69,9 @@ export interface TapeAnalysis {
     recEnd: string | null
     durationFrames: number
     title: string
+    // sampled (tape TC -> wall clock) curve so the ruler shows each position's true recording time
+    // (the wall clock jumps at pauses / different-day footage). Empty -> fall back to linear.
+    recAnchors?: { tc: string; rec: string }[]
   }
   summary: {
     recaptureSpots: number
