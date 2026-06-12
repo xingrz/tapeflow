@@ -1,6 +1,6 @@
 [project]
 name = "tapeflow-engine"
-version = "0.1.0"
+version = "1.0.0"
 description = "tapeflow's Python sidecar: route DV/HDV captures to the merge engines and serve a unified JSON-RPC analysis over stdio"
 requires-python = ">=3.11"
 # The merge engines are provided as git submodules under ../engines and made importable either by
