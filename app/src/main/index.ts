@@ -1,10 +1,55 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import { copyFile, mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises'
-import { basename, extname, join, parse, resolve } from 'node:path'
+import { basename, delimiter, extname, join, parse, resolve } from 'node:path'
+import { execFileSync } from 'node:child_process'
 import { Sidecar } from './sidecar'
 
 let win: BrowserWindow | null = null
 let sidecar: Sidecar | null = null
+
+/** The PATH the user's login shell sees, or null. A macOS/Linux app launched from Finder/Dock
+ *  inherits launchd's minimal PATH (no Homebrew/MacPorts), so the shell PATH is where ffmpeg /
+ *  dvrescue actually live. Best-effort: a sentinel isolates PATH from any rc-file stdout noise,
+ *  with a short timeout and a clean fall-through on failure. */
+function loginShellPath(): string | null {
+  if (process.platform === 'win32') return null
+  try {
+    const shellBin = process.env.SHELL || '/bin/zsh'
+    const out = execFileSync(shellBin, ['-lic', "printf '<<<%s>>>' \"$PATH\""], {
+      timeout: 3000,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore']
+    })
+    const m = out.match(/<<<([^>]*)>>>/)
+    return m && m[1] ? m[1] : null
+  } catch {
+    return null
+  }
+}
+
+/** PATH for the sidecar: the inherited PATH, plus the login-shell PATH, plus the well-known install
+ *  dirs — so `which ffmpeg` / `which dvrescue` succeed in a packaged app even when launched from the
+ *  Dock (where the inherited PATH is just /usr/bin:/bin:/usr/sbin:/sbin). De-duped, order preserved. */
+function sidecarPath(): string {
+  const seen = new Set<string>()
+  const dirs: string[] = []
+  const add = (p?: string | null): void => {
+    for (const d of (p ?? '').split(delimiter)) {
+      if (d && !seen.has(d)) {
+        seen.add(d)
+        dirs.push(d)
+      }
+    }
+  }
+  add(process.env.PATH)
+  if (process.platform !== 'win32') {
+    add(loginShellPath())
+    ;['/opt/homebrew/bin', '/opt/homebrew/sbin', '/usr/local/bin', '/usr/local/sbin',
+      '/opt/local/bin', '/usr/bin', '/bin'].forEach(add)
+    if (process.env.HOME) add(`${process.env.HOME}/.local/bin`)
+  }
+  return dirs.join(delimiter)
+}
 
 const HDV_EXTS = new Set(['.m2t', '.m2ts', '.mts', '.ts', '.tts', '.trp', '.tp', '.mpg', '.mpeg'])
 const DV_EXTS = new Set(['.dv', '.dif'])
@@ -15,12 +60,15 @@ function repoRoot(): string {
 }
 
 function startSidecar(): void {
+  // ffmpeg / dvrescue are external (resolved on PATH at runtime). A Dock-launched macOS app gets
+  // launchd's minimal PATH, so enrich it with the login-shell + well-known dirs (see sidecarPath).
+  const env = { ...process.env, PATH: sidecarPath() }
   if (app.isPackaged) {
     // Release: spawn the frozen sidecar binary bundled under resources/ (PyInstaller onedir with
-    // the engines baked in), so end users need no Python. ffmpeg/dvrescue are still found on PATH.
+    // the engines baked in), so end users need no Python.
     const exe = process.platform === 'win32' ? 'tapeflow-engine.exe' : 'tapeflow-engine'
     const bin = join(process.resourcesPath, 'tapeflow-engine', exe)
-    sidecar = new Sidecar(bin, [], { env: process.env })
+    sidecar = new Sidecar(bin, [], { env })
     return
   }
   // Dev: run the sidecar from source via the system Python; _bootstrap adds the engine submodules.
@@ -28,7 +76,7 @@ function startSidecar(): void {
   const python = process.env.TAPEFLOW_PYTHON || 'python3'
   sidecar = new Sidecar(python, ['-m', 'tapeflow_engine'], {
     cwd: root,
-    env: { ...process.env, PYTHONPATH: join(root, 'engine', 'src') }
+    env: { ...env, PYTHONPATH: join(root, 'engine', 'src') }
   })
 }
 
