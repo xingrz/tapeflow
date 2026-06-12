@@ -222,11 +222,19 @@ def from_hdvmerge(hdv, working_dir, files_by_tag):
 
 
 # ---------- DV (dvmerge.analysis/1) ----------
+#
+# dvmerge lays the tape out on a PHYSICAL axis (``pf`` — FramePos, frames in tape read order, with
+# missing frames taking their width), NOT on tape timecode, because a DV tape commonly holds several
+# recording sessions whose record-run tc each restart (overwrite, multi-day footage, over-capture).
+# We pass that physical axis straight through as ``axis`` and carry dvmerge's per-position tc/rec
+# ``anchors`` and session ``seams`` so the map can label by tc and mark the boundaries.
 
-def _dv_damage(dv, fps):
+def _dv_damage(dv):
     """dvmerge re-capture spans -> the unified damage list. A span that is purely ``missing`` (no
     capture has it) maps to ``missing``; anything with damaged-but-present frames (mosaic, or
-    mosaic+missing) maps to ``dirty`` — there are copies to improve on."""
+    mosaic+missing) maps to ``dirty`` — there are copies to improve on. ``axis`` is the physical
+    ``pf`` extent; ``runs`` carry both tc (labels) and pf (layout) so the map can draw the real
+    scattered damage on either axis."""
     files = dv["files"]
     out = []
     for i, sp in enumerate(dv["spans"]):
@@ -234,20 +242,21 @@ def _dv_damage(dv, fps):
         sev = sp["kind"]
         if sp.get("bmax"):
             sev += " · max %d blk" % sp["bmax"]
+        runs = sp.get("runs") or []
         out.append({
             "id": "s%d" % i,
             "kind": "missing" if sp["kind"] == "missing" else "dirty",
-            "axis": [_tc_frames(sp["tc0"], fps), _tc_frames(sp["tc1"], fps)],
+            "axis": [sp["pf0"], sp["pf1"]],
             "tcStart": sp["tc0"], "tcEnd": sp["tc1"],
             "recStart": sp["rdt0"], "recEnd": sp["rdt1"],
             "durationFrames": sp["length"],
             "coverage": cover,
             "copies": len(cover),
             "severity": sev,
-            # the actual scattered damaged sub-runs (the span bridges short clean gaps for the cue,
-            # but the map should show the real damage so it lines up with the per-capture lanes)
-            "runs": ([{"tcStart": r["tc0"], "tcEnd": r["tc1"]} for r in sp.get("runs", [])]
-                     or [{"tcStart": sp["tc0"], "tcEnd": sp["tc1"]}]),
+            "runs": ([{"tcStart": r["tc0"], "tcEnd": r["tc1"], "axis": [r["pf0"], r["pf1"]]}
+                      for r in runs]
+                     or [{"tcStart": sp["tc0"], "tcEnd": sp["tc1"],
+                          "axis": [sp["pf0"], sp["pf1"]]}]),
         })
     return out
 
@@ -259,62 +268,52 @@ def _dv_capture_damage(src):
             for d in src.get("damage", [])]
 
 
-def _dv_capture(src, files_by_tag, fps):
+def _dv_capture(src, files_by_tag):
     tag = src["tag"]
     if not src.get("aligned"):
         return {"tag": tag, "file": files_by_tag.get(tag, tag), "axis": [0, 0],
                 "tcSpan": [None, None], "recSpan": [None, None], "health": [], "damage": [],
                 "ranges": []}
+    cov = src.get("coverage") or []
+    ranges = ([{"tcStart": c["tc0"], "tcEnd": c["tc1"], "axis": [c.get("pf0"), c.get("pf1")]}
+               for c in cov]
+              or [{"tcStart": src["tc0"], "tcEnd": src["tc1"],
+                   "axis": [src.get("pf0", 0), src.get("pf1", 0)]}])
     return {
         "tag": tag,
         "file": files_by_tag.get(tag, tag),
-        "axis": [_tc_frames(src["tc0"], fps), _tc_frames(src["tc1"], fps)],
+        "axis": [src.get("pf0", 0), src.get("pf1", 0)],
         "tcSpan": [src["tc0"], src["tc1"]],
         "recSpan": [src["rdt0"], src["rdt1"]],
         "health": [],
         "damage": _dv_capture_damage(src),
-        # the TC runs this capture actually holds, split at its internal drops (dvmerge's per-input
-        # coverage); falls back to the whole span on an older dvmerge that doesn't surface it
-        "ranges": _capture_ranges(src),
+        # the runs this capture actually holds, split at its internal drops — tc for labels, pf for
+        # layout (falls back to the whole span on an older dvmerge that doesn't surface coverage)
+        "ranges": ranges,
     }
 
 
-def _dv_segments(dv, fps, damage):
-    """Synthesise result-track segments for DV: the tape span split at the truly-missing gaps (tape
-    no capture holds). dvrescue produces one continuous merged stream — there is no per-capture seam
-    chain as in HDV — so a 'segment' here is just a contiguous covered stretch of the output. This
-    gives the DV result track the same covered-vs-missing fill the HDV track shows, instead of a
-    flat empty bar. Only ``missing`` spots break coverage; ``dirty`` frames are present (just damaged)
-    and stay within a segment, drawn on top as damage."""
-    tape0, tape1 = dv.get("tc0"), dv.get("tc1")
-    if not tape0 or not tape1 or _tc_frames(tape1, fps) <= _tc_frames(tape0, fps):
-        return []
-    holes = sorted((d for d in damage if d["kind"] == "missing" and d["tcStart"] and d["tcEnd"]),
-                   key=lambda d: _tc_frames(d["tcStart"], fps))
+def _dv_segments(dv):
+    """Result-track coverage segments straight from dvmerge: the coarse covered runs on the physical
+    axis, already split at session seams and large missing holes. ``gapBefore`` marks a run that a
+    seam or a missing hole precedes (drawn in the seam colour)."""
     title = _title(dv["files"])
-    bounds = []
-    cur = tape0
-    for d in holes:
-        if _tc_frames(d["tcStart"], fps) > _tc_frames(cur, fps):
-            bounds.append((cur, d["tcStart"]))
-        if _tc_frames(d["tcEnd"], fps) > _tc_frames(cur, fps):
-            cur = d["tcEnd"]
-    if _tc_frames(tape1, fps) > _tc_frames(cur, fps):
-        bounds.append((cur, tape1))
     return [{
         "tag": title,
-        "axis": [_tc_frames(a, fps), _tc_frames(b, fps)],
-        "tcSpan": [a, b],
-        "recSpan": [None, None],
-        "gapBefore": i > 0,   # a missing gap precedes this segment -> drawn in the seam colour
-    } for i, (a, b) in enumerate(bounds)]
+        "axis": [s["pf0"], s["pf1"]],
+        "tcSpan": [s["tc0"], s["tc1"]],
+        "recSpan": [s["rdt0"], s["rdt1"]],
+        "gapBefore": bool(s.get("break_before")),
+    } for s in dv.get("segments", [])]
 
 
 def from_dvmerge(dv, working_dir, files_by_tag):
-    """``dvmerge.analysis/1`` dict -> ``tapeflow.analysis/1`` dict. DV has no segment chain (dvrescue
-    merges frame-by-frame), so ``segments`` is empty; the tape-map lanes come from ``captures``."""
+    """``dvmerge.analysis/1`` dict -> ``tapeflow.analysis/1`` dict. Laid out on dvmerge's physical
+    ``pf`` axis; ``segments`` are dvmerge's coarse covered runs, ``axisAnchors``/``seams`` let the
+    map label tc/rec per position and mark recording-session boundaries."""
     fps = dv["fps"]
-    damage = _dv_damage(dv, fps)
+    damage = _dv_damage(dv)
+    anchors = [{"axis": a["pf"], "tc": a["tc"], "rec": a["rdt"]} for a in dv.get("anchors", [])]
     return {
         "schema": SCHEMA,
         "format": "dv",
@@ -325,17 +324,23 @@ def from_dvmerge(dv, working_dir, files_by_tag):
         "tape": {
             "tcStart": dv["tc0"], "tcEnd": dv["tc1"],
             "recStart": dv["rdt0"], "recEnd": dv["rdt1"],
-            "durationFrames": dv["total_frames"],
+            "durationFrames": dv["total_frames"],   # PHYSICAL frame count (the pf axis extent)
             "title": _title(dv["files"]),
-            "recAnchors": [],   # DV merges frame-by-frame; no per-position rec curve (uses recStart)
+            "recAnchors": [],
+            # per-position (pf -> tc, rec) curve so the map labels each physical position; and the
+            # physical positions of recording-session boundaries (seam markers). multiSession tells
+            # the map to lay out on the physical axis instead of tc (which restarts at every session).
+            "axisAnchors": anchors,
+            "seams": list(dv.get("seams", []) or []),
+            "multiSession": bool(dv.get("multi_session")),
         },
         "summary": {
             "recaptureSpots": len(damage),
             "missingFrames": dv["miss"],
             "unusedCaptures": sum(1 for s in dv["sources"] if not s.get("aligned")),
         },
-        "captures": [_dv_capture(s, files_by_tag, fps) for s in dv["sources"]],
-        "segments": _dv_segments(dv, fps, damage),
+        "captures": [_dv_capture(s, files_by_tag) for s in dv["sources"]],
+        "segments": _dv_segments(dv),
         "damage": damage,
         "divergences": [],
     }

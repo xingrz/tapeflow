@@ -67,7 +67,9 @@ let dragStartMax = 1
 let moved = false
 
 const domain = computed<Domain>(() => makeDomain(props.analysis))
-const axisFallback = computed(() => domain.value.mode === 'axis')
+// the raw-coordinate warning is only for a TRUE fallback (axis layout with no tc labels); the
+// multi-session physical layout is intentional and still labels in tc, so it shows no warning
+const axisFallback = computed(() => domain.value.mode === 'axis' && !hasAxisLabels.value)
 
 defineExpose({
   focusDamage,
@@ -355,6 +357,7 @@ function drawLanes(): void {
   if (!ctx) return
   drawSelectionFill(ctx)
   drawCaptureLanes(ctx)
+  drawSeams(ctx, 0, lanesHeight.value)
   drawSelectionEdges(ctx, 0, lanesHeight.value)
 }
 
@@ -444,10 +447,72 @@ function fmtRec(ms: number): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
 }
 
+// The (physical position -> tc seconds, wall-clock ms) curve for a multi-session tape laid out on the
+// physical axis: parsed once, sorted by position. The ruler reads tc and rec at each tick from this
+// instead of from a single linear origin, so a session's restarted tc and its own recording day both
+// read correctly.
+const axisAnchors = computed(() => {
+  const fps = props.analysis.fps
+  const pts: Array<{ axis: number; tc: number | null; ms: number | null }> = []
+  for (const a of props.analysis.tape.axisAnchors ?? []) {
+    const tc = tcToSeconds(a.tc, fps)
+    const d = parseRecordingTime(a.rec)
+    pts.push({ axis: a.axis, tc: tc ?? null, ms: d ? d.getTime() : null })
+  }
+  pts.sort((p, q) => p.axis - q.axis)
+  return pts
+})
+
+const hasAxisLabels = computed(() => domain.value.mode === 'axis' && axisAnchors.value.length > 0)
+
+// tape tc + wall clock at a physical position, interpolated from the axisAnchors curve. Snaps across
+// a discontinuity (tc or rec stepping backward = a new recording session) so it never invents an
+// impossible in-between value. Returns nulls when there is no curve (raw axis-coordinate fallback).
+function labelAtAxis(axisPos: number): { tc: string | null; rec: string | null } {
+  const pts = axisAnchors.value
+  if (!pts.length) return { tc: null, rec: null }
+  if (axisPos <= pts[0].axis) return { tc: tcStr(pts[0].tc), rec: recStr(pts[0].ms) }
+  const last = pts[pts.length - 1]
+  if (axisPos >= last.axis) return { tc: tcStr(last.tc), rec: recStr(last.ms) }
+  let lo = 0
+  let hi = pts.length - 1
+  while (lo + 1 < hi) {
+    const mid = (lo + hi) >> 1
+    if (pts[mid].axis <= axisPos) lo = mid
+    else hi = mid
+  }
+  const a = pts[lo]
+  const b = pts[hi]
+  const f = b.axis > a.axis ? (axisPos - a.axis) / (b.axis - a.axis) : 0
+  const nearer = axisPos - a.axis <= b.axis - axisPos ? a : b
+  // tc: linear within a session; a backward step is a seam -> snap to the nearer side
+  const tc =
+    a.tc != null && b.tc != null && b.tc >= a.tc
+      ? tcStr(a.tc + f * (b.tc - a.tc))
+      : tcStr(nearer.tc)
+  // rec: same, snapping when the wall clock jumps backward or by more than an hour (different day)
+  const rec =
+    a.ms != null && b.ms != null && b.ms - a.ms >= 0 && b.ms - a.ms <= 3_600_000
+      ? recStr(a.ms + f * (b.ms - a.ms))
+      : recStr(nearer.ms)
+  return { tc, rec }
+}
+
+function tcStr(seconds: number | null): string | null {
+  return seconds == null ? null : secondsToTc(seconds, props.analysis.fps)
+}
+
+function recStr(ms: number | null): string | null {
+  return ms == null ? null : fmtRec(ms)
+}
+
 function drawRuler(ctx: CanvasRenderingContext2D): void {
   const plot = plotRect()
   const span = viewMax.value - viewMin.value
-  const labelWidth = domain.value.mode === 'tc' ? 126 : 64
+  // tc mode and the multi-session physical layout both print a tc (+rec) label, so reserve the wide
+  // slot; only a raw-coordinate axis fallback uses the narrow numeric slot.
+  const tcLabelled = domain.value.mode === 'tc' || hasAxisLabels.value
+  const labelWidth = tcLabelled ? 126 : 64
   const targetTicks = Math.max(2, Math.floor(plot.w / labelWidth))
   const step = niceStep(span / targetTicks)
   const start = Math.ceil(viewMin.value / step) * step
@@ -471,11 +536,23 @@ function drawRuler(ctx: CanvasRenderingContext2D): void {
     ctx.lineTo(x, 36)
     ctx.stroke()
 
-    const tcLabel = domain.value.mode === 'tc' ? secondsToTc(v, props.analysis.fps) : `${Math.round(v)}`
+    // tc mode reads tc from the position directly; physical layout reads tc+rec from axisAnchors;
+    // a bare axis fallback prints the raw coordinate.
+    let tcLabel: string
+    let rec: string | null = null
+    if (domain.value.mode === 'tc') {
+      tcLabel = secondsToTc(v, props.analysis.fps)
+      rec = recLabelAt(v)
+    } else if (hasAxisLabels.value) {
+      const at = labelAtAxis(v)
+      tcLabel = at.tc ?? `${Math.round(v)}`
+      rec = at.rec
+    } else {
+      tcLabel = `${Math.round(v)}`
+    }
     ctx.fillStyle = colors.tcText
     ctx.fillText(tcLabel, clampedLabelX(ctx, tcLabel, x + 5, plot.x, plot.x + plot.w), 9)
 
-    const rec = domain.value.mode === 'tc' ? recLabelAt(v) : null
     if (rec && plot.w >= 340) {
       const recLabel = rec.slice(11)
       ctx.fillStyle = colors.recText
@@ -485,9 +562,33 @@ function drawRuler(ctx: CanvasRenderingContext2D): void {
     }
   }
 
+  drawSeams(ctx, 20, HEADER_H)
+
   ctx.fillStyle = colors.axisText
   ctx.font = '11px system-ui, -apple-system, sans-serif'
-  ctx.fillText(domain.value.mode === 'tc' ? t('map.tapeTcClock') : t('map.tapeCoordinate'), 12, 16)
+  ctx.fillText(tcLabelled ? t('map.tapeTcClock') : t('map.tapeCoordinate'), 12, 16)
+}
+
+// Recording-session boundaries (a tc restart). Only present on a multi-session tape laid out on the
+// physical axis; drawn as a thin dashed marker so you can see where one recording ends and the next
+// (an overwrite, a different day, an over-capture) begins.
+function drawSeams(ctx: CanvasRenderingContext2D, y0: number, y1: number): void {
+  const seams = props.analysis.tape.seams
+  if (domain.value.mode !== 'axis' || !seams || !seams.length) return
+  const plot = plotRect()
+  ctx.save()
+  ctx.strokeStyle = colors.recText
+  ctx.lineWidth = 1
+  ctx.setLineDash([2, 2])
+  for (const s of seams) {
+    const x = xForValue(s)
+    if (x < plot.x - 1 || x > plot.x + plot.w + 1) continue
+    ctx.beginPath()
+    ctx.moveTo(x + 0.5, y0)
+    ctx.lineTo(x + 0.5, y1)
+    ctx.stroke()
+  }
+  ctx.restore()
 }
 
 function drawResultTrack(ctx: CanvasRenderingContext2D): void {
@@ -598,9 +699,11 @@ function drawCaptureLanes(ctx: CanvasRenderingContext2D): void {
 
 function laneSegments(capture: Capture): Array<{ x: number; w: number }> {
   const out: Array<{ x: number; w: number }> = []
-  if (domain.value.mode === 'tc' && capture.ranges && capture.ranges.length) {
+  // each covered run carries both its tc span (tc mode) and its physical axis span (DV physical
+  // layout), so the lane draws its real held stretches in either mode — the gaps between are drops
+  if (capture.ranges && capture.ranges.length) {
     for (const seg of capture.ranges) {
-      const r = rangeForTcOrAxis([seg.tcStart, seg.tcEnd], capture.axis)
+      const r = rangeForTcOrAxis([seg.tcStart, seg.tcEnd], seg.axis ?? capture.axis)
       const c = r ? clippedXRange(r, 2) : null
       if (c) out.push(c)
     }
@@ -616,9 +719,12 @@ function laneSegments(capture: Capture): Array<{ x: number; w: number }> {
 function laneGaps(capture: Capture): Array<{ x: number; w: number }> {
   const out: Array<{ x: number; w: number }> = []
   const r = capture.ranges
-  if (domain.value.mode !== 'tc' || !r || r.length < 2) return out
+  if (!r || r.length < 2) return out
   for (let i = 0; i < r.length - 1; i++) {
-    const range = rangeForTcOrAxis([r[i].tcEnd, r[i + 1].tcStart], capture.axis)
+    const a = r[i].axis
+    const b = r[i + 1].axis
+    const axisGap: [number, number] = a && b ? [a[1], b[0]] : capture.axis
+    const range = rangeForTcOrAxis([r[i].tcEnd, r[i + 1].tcStart], axisGap)
     const c = range ? clippedXRange(range, 2) : null
     if (c) out.push(c)
   }
@@ -670,7 +776,9 @@ function drawDamageRegion(
   const pieces: Array<{ x: number; w: number }> = []
   if (spot.runs && spot.runs.length) {
     for (const run of spot.runs) {
-      const rr = rangeForTcOrAxis([run.tcStart, run.tcEnd], spot.axis)
+      // each run carries its own physical axis span, so the scattered damage draws at the right
+      // place on the physical layout (not the whole spot extent)
+      const rr = rangeForTcOrAxis([run.tcStart, run.tcEnd], run.axis ?? spot.axis)
       const rc = rr ? clippedXRange(rr, 4) : null
       if (rc) pieces.push(rc)
     }
@@ -808,13 +916,28 @@ function makeDomain(analysis: TapeAnalysis): Domain {
     addTc(spot.tcEnd)
   }
   const tcDomain = domainFromValues(tcValues)
-  if (tcDomain) return { mode: 'tc', ...tcDomain }
 
   const axisValues: number[] = []
   for (const capture of analysis.captures) axisValues.push(capture.axis[0], capture.axis[1])
   for (const segment of analysis.segments) axisValues.push(segment.axis[0], segment.axis[1])
   for (const spot of analysis.damage) axisValues.push(spot.axis[0], spot.axis[1])
-  return { mode: 'axis', ...(domainFromValues(axisValues) ?? { min: 0, max: 1 }) }
+  const axisDomain = domainFromValues(axisValues)
+
+  // Lay out on the PHYSICAL axis when the tape has more than one recording session (tc restarts at a
+  // seam, so a tc axis would overlap or scatter the sessions), or when the tc span is stretched far
+  // past the actual frame count by a stray chunk at a wildly different tc. The ruler still labels in
+  // tc — via the per-position axisAnchors curve — so nothing is lost. Single-session tapes keep the
+  // tc axis exactly as before.
+  if (axisDomain) {
+    const physical = analysis.tape.durationFrames || 0
+    const fps = Math.max(1, Math.round(analysis.fps || 25))
+    const tcStretched =
+      !!tcDomain && physical > 0 && (tcDomain.max - tcDomain.min) * fps > physical * 1.5
+    if (analysis.tape.multiSession === true || tcStretched) return { mode: 'axis', ...axisDomain }
+  }
+
+  if (tcDomain) return { mode: 'tc', ...tcDomain }
+  return { mode: 'axis', ...(axisDomain ?? { min: 0, max: 1 }) }
 }
 
 function domainFromValues(values: number[]): { min: number; max: number } | null {

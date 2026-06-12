@@ -144,24 +144,36 @@ class TestNormalizeHdv(unittest.TestCase):
 
 
 def _span(kind="mosaic", cover=(0,), miss=0, dmg=1, bmax=7):
-    return {"tf0": 250, "tf1": 250, "length": 1, "tc0": "00:00:10:00", "tc1": "00:00:10:00",
+    return {"pf0": 250, "pf1": 250, "length": 1, "tc0": "00:00:10:00", "tc1": "00:00:10:00",
             "rdt0": "2010-01-01 08:00:10", "rdt1": "2010-01-01 08:00:10",
-            "kind": kind, "dmg": dmg, "miss": miss, "bmax": bmax, "cover": list(cover)}
+            "kind": kind, "dmg": dmg, "miss": miss, "bmax": bmax, "cover": list(cover),
+            "runs": [{"pf0": 250, "pf1": 250, "tc0": "00:00:10:00", "tc1": "00:00:10:00"}]}
 
 
-def _dv(spans=(), miss=0, complete=True, unaligned=False):
+# dvmerge now lays the tape on a physical axis (pf) and ships its own segments/seams/anchors; the
+# fixture mirrors that shape. ``segments`` defaults to one covered run spanning the whole tape.
+def _dv(spans=(), miss=0, complete=True, unaligned=False, segments=None, seams=(),
+        multi_session=False):
     return {
         "schema": "dvmerge.analysis/1", "version": "0.1.0", "fps": 25.0,
         "total_frames": 1000, "tc0": "00:00:00:00", "tc1": "00:00:40:00",
         "rdt0": "2010-01-01 08:00:00", "rdt1": "2010-01-01 08:00:40",
         "clean": 1000 - miss, "dmg": 0, "miss": miss, "lost_frames": miss,
         "complete": complete, "files": ["A-1", "A-2"],
+        "multi_session": multi_session, "seams": list(seams),
+        "anchors": [{"pf": 0, "tc": "00:00:00:00", "rdt": "2010-01-01 08:00:00"},
+                    {"pf": 999, "tc": "00:00:40:00", "rdt": "2010-01-01 08:00:40"}],
+        "segments": segments if segments is not None else [
+            {"pf0": 0, "pf1": 999, "tc0": "00:00:00:00", "tc1": "00:00:40:00",
+             "rdt0": "2010-01-01 08:00:00", "rdt1": "2010-01-01 08:00:40", "break_before": None}],
         "spans": list(spans),
         "sources": [
             {"tag": "A-1", "aligned": True, "tc0": "00:00:00:00", "tc1": "00:00:30:00",
+             "pf0": 0, "pf1": 750,
              "rdt0": "2010-01-01 08:00:00", "rdt1": "2010-01-01 08:00:30"},
             {"tag": "A-2", "aligned": False} if unaligned else
             {"tag": "A-2", "aligned": True, "tc0": "00:00:10:00", "tc1": "00:00:40:00",
+             "pf0": 250, "pf1": 1000,
              "rdt0": "2010-01-01 08:00:10", "rdt1": "2010-01-01 08:00:40"}],
     }
 
@@ -174,15 +186,21 @@ class TestNormalizeDv(unittest.TestCase):
         self.assertEqual(d["format"], "dv")
         self.assertTrue(d["complete"])
         self.assertTrue(d["buildable"])
-        # a clean DV tape has no missing gaps -> one synthesised result segment spanning the whole
-        # tape (gives the result track a filled bar, like HDV, instead of an empty one)
+        # segments come straight from dvmerge's coarse covered runs (here one, spanning the tape)
         self.assertEqual(len(d["segments"]), 1)
         self.assertEqual(d["segments"][0]["tcSpan"], ["00:00:00:00", "00:00:40:00"])
+        self.assertEqual(d["segments"][0]["axis"], [0, 999])
         self.assertFalse(d["segments"][0]["gapBefore"])
         self.assertEqual(d["damage"], [])
         self.assertEqual(d["tape"]["tcEnd"], "00:00:40:00")
+        self.assertEqual(d["tape"]["durationFrames"], 1000)   # the physical pf extent
+        self.assertFalse(d["tape"]["multiSession"])
+        self.assertEqual(d["tape"]["seams"], [])
+        self.assertEqual(d["tape"]["axisAnchors"][0],
+                         {"axis": 0, "tc": "00:00:00:00", "rec": "2010-01-01 08:00:00"})
         self.assertEqual([c["tag"] for c in d["captures"]], ["A-1", "A-2"])
         self.assertEqual(d["captures"][0]["file"], "A-1.dv")
+        self.assertEqual(d["captures"][0]["axis"], [0, 750])   # physical pf span, not tc
 
     def test_mosaic_span_is_dirty_with_coverage(self):
         d = normalize.from_dvmerge(_dv(spans=[_span("mosaic", cover=(0,))], complete=False),
@@ -190,9 +208,11 @@ class TestNormalizeDv(unittest.TestCase):
         self.assertEqual(len(d["damage"]), 1)
         spot = d["damage"][0]
         self.assertEqual(spot["kind"], "dirty")
+        self.assertEqual(spot["axis"], [250, 250])   # physical pf extent
         self.assertEqual(spot["coverage"], ["A-1"])
         self.assertEqual(spot["copies"], 1)
         self.assertIn("mosaic", spot["severity"])
+        self.assertEqual(spot["runs"][0]["axis"], [250, 250])
 
     def test_missing_span_is_missing_with_no_coverage(self):
         d = normalize.from_dvmerge(
@@ -204,29 +224,36 @@ class TestNormalizeDv(unittest.TestCase):
         self.assertEqual(spot["copies"], 0)
         self.assertEqual(d["summary"]["missingFrames"], 5)
 
-    def test_missing_gap_splits_result_segments(self):
-        # a missing span at 00:00:10 breaks the tape into two covered result segments around it
-        d = normalize.from_dvmerge(
-            _dv(spans=[_span("missing", cover=(), miss=5, dmg=0, bmax=0)], miss=5, complete=False),
-            "/work", {})
-        self.assertEqual(len(d["segments"]), 2)
-        self.assertEqual(d["segments"][0]["tcSpan"], ["00:00:00:00", "00:00:10:00"])
-        self.assertEqual(d["segments"][1]["tcSpan"], ["00:00:10:00", "00:00:40:00"])
+    def test_multi_session_passes_through_seams_and_layout(self):
+        # a second recording session (record-run tc restarts low) -> dvmerge flags multi_session and
+        # a seam; normalize passes them through plus dvmerge's segments (split at the seam).
+        segs = [{"pf0": 0, "pf1": 9, "tc0": "00:36:05:08", "tc1": "00:36:06:06",
+                 "rdt0": "2008-06-26 21:58:28", "rdt1": "2008-06-26 21:58:29", "break_before": None},
+                {"pf0": 10, "pf1": 999, "tc0": "00:00:00:00", "tc1": "00:02:31:00",
+                 "rdt0": "2008-06-27 15:18:00", "rdt1": "2008-06-27 15:20:00",
+                 "break_before": "seam"}]
+        d = normalize.from_dvmerge(_dv(segments=segs, seams=[10], multi_session=True), "/work", {})
+        self.assertTrue(d["tape"]["multiSession"])
+        self.assertEqual(d["tape"]["seams"], [10])
+        self.assertEqual([s["axis"] for s in d["segments"]], [[0, 9], [10, 999]])
         self.assertFalse(d["segments"][0]["gapBefore"])
-        self.assertTrue(d["segments"][1]["gapBefore"])  # a missing gap precedes it -> seam colour
+        self.assertTrue(d["segments"][1]["gapBefore"])   # the seam precedes it
 
     def test_capture_ranges_follow_dvmerge_coverage(self):
-        # dvmerge surfaces per-input coverage runs -> the capture lane shows them split at its drops
+        # dvmerge surfaces per-input coverage runs (tc + pf) -> the lane shows them split at its drops
         dv = _dv()
-        dv["sources"][0]["coverage"] = [{"tc0": "00:00:00:00", "tc1": "00:00:08:00"},
-                                        {"tc0": "00:00:20:00", "tc1": "00:00:30:00"}]
+        dv["sources"][0]["coverage"] = [
+            {"tc0": "00:00:00:00", "tc1": "00:00:08:00", "pf0": 0, "pf1": 200},
+            {"tc0": "00:00:20:00", "tc1": "00:00:30:00", "pf0": 500, "pf1": 750}]
         d = normalize.from_dvmerge(dv, "/work", {})
         cap = next(c for c in d["captures"] if c["tag"] == "A-1")
-        self.assertEqual(cap["ranges"], [{"tcStart": "00:00:00:00", "tcEnd": "00:00:08:00"},
-                                         {"tcStart": "00:00:20:00", "tcEnd": "00:00:30:00"}])
-        # the other capture has no coverage field -> falls back to its whole span
+        self.assertEqual(cap["ranges"], [
+            {"tcStart": "00:00:00:00", "tcEnd": "00:00:08:00", "axis": [0, 200]},
+            {"tcStart": "00:00:20:00", "tcEnd": "00:00:30:00", "axis": [500, 750]}])
+        # the other capture has no coverage field -> falls back to its whole span (tc + pf)
         other = next(c for c in d["captures"] if c["tag"] == "A-2")
-        self.assertEqual(other["ranges"], [{"tcStart": "00:00:10:00", "tcEnd": "00:00:40:00"}])
+        self.assertEqual(other["ranges"],
+                         [{"tcStart": "00:00:10:00", "tcEnd": "00:00:40:00", "axis": [250, 1000]}])
 
     def test_unaligned_source_counted(self):
         d = normalize.from_dvmerge(_dv(unaligned=True, complete=False), "/work", {})

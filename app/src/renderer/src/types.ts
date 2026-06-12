@@ -36,15 +36,16 @@ export interface Capture {
   // where THIS capture is itself damaged (regardless of whether another copy is clean there)
   damage: CaptureDamage[]
   // the TC segments this capture actually holds — split at internal drops, so the lane shows real
-  // gaps instead of one solid bar (a continuity break can drop content)
-  ranges: { tcStart: string | null; tcEnd: string | null }[]
+  // gaps instead of one solid bar (a continuity break can drop content). axis = physical span (DV)
+  ranges: { tcStart: string | null; tcEnd: string | null; axis?: [number, number] }[]
 }
 
-// one damaged run within a single capture, by tape TC
+// one damaged run within a single capture, by tape TC (axis = its physical span, for axis layout)
 export interface CaptureDamage {
   tcStart: string | null
   tcEnd: string | null
-  severity: string
+  severity?: string
+  axis?: [number, number]
 }
 
 export interface Segment {
@@ -72,6 +73,12 @@ export interface TapeAnalysis {
     // sampled (tape TC -> wall clock) curve so the ruler shows each position's true recording time
     // (the wall clock jumps at pauses / different-day footage). Empty -> fall back to linear.
     recAnchors?: { tc: string; rec: string }[]
+    // multi-session tape (record-run tc restarts at a seam): laid out on the PHYSICAL axis instead
+    // of tc. axisAnchors is the sampled (physical position -> tc, rec) curve for ruler labels; seams
+    // are the physical positions of recording-session boundaries (drawn as markers).
+    multiSession?: boolean
+    axisAnchors?: { axis: number; tc: string; rec: string }[]
+    seams?: number[]
   }
   summary: {
     recaptureSpots: number
