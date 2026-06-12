@@ -59,6 +59,12 @@ function repoRoot(): string {
   return resolve(app.getAppPath(), '..')
 }
 
+function appIconPath(): string {
+  return app.isPackaged
+    ? join(process.resourcesPath, 'icon.png')
+    : join(app.getAppPath(), 'build', 'icon.png')
+}
+
 function startSidecar(): void {
   // ffmpeg / dvrescue are external (resolved on PATH at runtime). A Dock-launched macOS app gets
   // launchd's minimal PATH, so enrich it with the login-shell + well-known dirs (see sidecarPath).
@@ -123,6 +129,7 @@ function createWindow(): void {
     // Fuse the system chrome into our dark UI: macOS keeps inset traffic lights over the topbar;
     // Windows/Linux draw the native min/max/close as an overlay tinted to match the topbar.
     titleBarStyle: isMac ? 'hiddenInset' : 'hidden',
+    icon: appIconPath(),
     ...(isMac
       ? {}
       : { titleBarOverlay: { color: '#0e1211', symbolColor: '#e6ebe8', height: 38 } }),
