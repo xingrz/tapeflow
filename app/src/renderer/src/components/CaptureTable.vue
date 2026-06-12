@@ -50,23 +50,25 @@ function compareMtime(a: number | undefined, b: number | undefined): number {
     <div class="panel-title-row">
       <div>
         <div class="heading-line">
-          <h2>Captures</h2>
+          <h2>{{ $t('captures.title') }}</h2>
           <span
             v-if="analysis"
             class="link-badge"
             :class="{ warn: analysis.summary.unusedCaptures }"
             :title="analysis.summary.unusedCaptures
-              ? `${analysis.summary.unusedCaptures} capture(s) could not be placed onto the tape and are not in the merged output.`
-              : 'Every capture the engine placed is represented on the tape map above.'"
+              ? $t('captures.unplacedTip', { count: analysis.summary.unusedCaptures })
+              : $t('captures.linkedTip')"
           >
             <component :is="analysis.summary.unusedCaptures ? Unlink : Link2" :size="12" />
-            {{ analysis.summary.unusedCaptures ? `${analysis.summary.unusedCaptures} unplaced` : 'All linked' }}
+            {{ analysis.summary.unusedCaptures ? $t('captures.unplaced', { count: analysis.summary.unusedCaptures }) : $t('captures.allLinked') }}
           </span>
         </div>
-        <p v-if="analysis">{{ analysis.captures.length }} lanes | {{ analysis.segments.length || 'DV frame merge' }} output segments</p>
-        <p v-else>{{ captures.length }} files in workspace</p>
+        <p v-if="analysis">{{ analysis.segments.length
+          ? $t('captures.lanesSegments', { lanes: analysis.captures.length, segments: analysis.segments.length })
+          : $t('captures.lanesDvMerge', { lanes: analysis.captures.length }) }}</p>
+        <p v-else>{{ $t('captures.filesInWorkspace', { count: captures.length }) }}</p>
       </div>
-      <button class="panel-action" type="button" title="Collapse captures" @click="emit('collapse')">
+      <button class="panel-action" type="button" :title="$t('captures.collapse')" @click="emit('collapse')">
         <ChevronsDown :size="15" />
       </button>
     </div>
@@ -75,9 +77,9 @@ function compareMtime(a: number | undefined, b: number | undefined): number {
       <table>
         <thead>
           <tr>
-            <th>File</th>
-            <th>Tape TC</th>
-            <th>Recording time</th>
+            <th>{{ $t('captures.file') }}</th>
+            <th>{{ $t('captures.tapeTc') }}</th>
+            <th>{{ $t('captures.recordingTime') }}</th>
           </tr>
         </thead>
         <tbody>
@@ -106,10 +108,10 @@ function compareMtime(a: number | undefined, b: number | undefined): number {
       <table>
         <thead>
           <tr>
-            <th>File</th>
-            <th>Format</th>
-            <th>Size</th>
-            <th>Index</th>
+            <th>{{ $t('captures.file') }}</th>
+            <th>{{ $t('captures.format') }}</th>
+            <th>{{ $t('captures.size') }}</th>
+            <th>{{ $t('captures.index') }}</th>
           </tr>
         </thead>
         <tbody>
@@ -128,14 +130,14 @@ function compareMtime(a: number | undefined, b: number | undefined): number {
               <span
                 v-if="capture.status === 'indexing'"
                 class="index-status indexing index-progress"
-                :title="`Indexing ${Math.round(capture.progress * 100)}%`"
+                :title="$t('captures.indexingPct', { pct: Math.round(capture.progress * 100) })"
               >
                 <span class="index-bar">
                   <span class="index-bar-fill" :style="{ width: `${Math.round(capture.progress * 100)}%` }" />
                 </span>
                 {{ Math.round(capture.progress * 100) }}%
               </span>
-              <span v-else class="index-status" :class="capture.status">{{ capture.status }}</span>
+              <span v-else class="index-status" :class="capture.status">{{ $t(`status.${capture.status}`) }}</span>
             </td>
           </tr>
         </tbody>

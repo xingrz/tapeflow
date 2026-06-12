@@ -10,7 +10,9 @@ import {
   HardDrive,
   Loader2,
   RefreshCw,
+  Settings,
   UploadCloud,
+  X,
   XCircle
 } from '@lucide/vue'
 import BuildPanel from './components/BuildPanel.vue'
@@ -19,8 +21,14 @@ import DamageSidebar from './components/DamageSidebar.vue'
 import TapeMap from './components/TapeMap.vue'
 import { useWorkflowStore, type DamageView } from './stores/workflow'
 import { formatDurationFrames, shortPath } from './utils/format'
+import { LANG_PREFS, langPref, setLangPref, type LangPref } from './i18n'
 
 const workflow = useWorkflowStore()
+const settingsOpen = ref(false)
+const langChoice = ref<LangPref>(langPref())
+function applyLang(): void {
+  setLangPref(langChoice.value)
+}
 const dragActive = ref(false)
 const tapeMapRef = ref<InstanceType<typeof TapeMap> | null>(null)
 const workspaceRef = ref<HTMLElement | null>(null)
@@ -160,18 +168,18 @@ function clamp(value: number, min: number, max: number): number {
         <div class="brand-mark">tf</div>
         <div>
           <h1>tapeflow</h1>
-          <p>DV / HDV merge</p>
+          <p>{{ $t('app.subtitle') }}</p>
         </div>
       </div>
 
       <section class="action-bar" aria-label="Workspace actions">
         <button class="primary-action" type="button" :disabled="workflow.busy" @click="workflow.pickDir">
           <FolderOpen :size="15" />
-          Choose directory
+          {{ $t('app.chooseDir') }}
         </button>
         <button class="tool-button" type="button" :disabled="!workflow.dir || workflow.busy" @click="workflow.analyze">
           <RefreshCw :size="15" />
-          Re-analyse
+          {{ $t('app.reAnalyse') }}
         </button>
         <button
           class="tool-button"
@@ -180,13 +188,16 @@ function clamp(value: number, min: number, max: number): number {
           @click="workflow.exportMerged"
         >
           <Download :size="15" />
-          Export merged
+          {{ $t('app.exportMerged') }}
         </button>
         <div class="path-chip">
           <HardDrive :size="14" />
           <span>{{ shortPath(workflow.dir) }}</span>
         </div>
         <div v-if="workflow.progressText" class="progress-chip">{{ workflow.progressText }}</div>
+        <button class="icon-button" type="button" :title="$t('app.settings')" @click="settingsOpen = true">
+          <Settings :size="15" />
+        </button>
       </section>
 
       <div v-if="workflow.caps" class="cap-strip" aria-label="Capabilities">
@@ -217,7 +228,7 @@ function clamp(value: number, min: number, max: number): number {
     <section v-if="workflow.building" class="build-progress" aria-label="Export progress">
       <Loader2 :size="18" class="spin" />
       <div class="build-progress-body">
-        <strong>{{ workflow.buildProgress == null ? 'Verifying merged file…' : 'Building merged file…' }}</strong>
+        <strong>{{ workflow.buildProgress == null ? $t('build.verifying') : $t('build.building') }}</strong>
         <div class="progress-track">
           <div
             class="progress-fill"
@@ -252,15 +263,15 @@ function clamp(value: number, min: number, max: number): number {
             | {{ formatDurationFrames(workflow.analysis.tape.durationFrames, workflow.analysis.fps) }}
           </p>
           <p v-else>
-            {{ workflow.captureViews.length }} capture files queued
-            <span v-if="workflow.busy">| {{ workflow.progressText || 'Analysing' }}</span>
+            {{ $t('verdict.queued', { count: workflow.captureViews.length }) }}
+            <span v-if="workflow.busy">| {{ workflow.progressText || $t('verdict.analysing') }}</span>
           </p>
         </div>
         <div class="verdict-metrics">
-          <span><strong>{{ workflow.outstandingDamage.length }}</strong> outstanding</span>
-          <span><strong>{{ workflow.dirtyDamage.length }}</strong> dirty</span>
-          <span><strong>{{ missingDuration }}</strong> missing</span>
-          <span><strong>{{ workflow.captureViews.length }}</strong> captures</span>
+          <span><strong>{{ workflow.outstandingDamage.length }}</strong> {{ $t('metrics.outstanding') }}</span>
+          <span><strong>{{ workflow.dirtyDamage.length }}</strong> {{ $t('metrics.dirty') }}</span>
+          <span><strong>{{ missingDuration }}</strong> {{ $t('metrics.missing') }}</span>
+          <span><strong>{{ workflow.captureViews.length }}</strong> {{ $t('metrics.captures') }}</span>
         </div>
       </section>
 
@@ -281,14 +292,14 @@ function clamp(value: number, min: number, max: number): number {
 
           <div
             class="split-handle horizontal"
-            title="Resize captures panel"
+            :title="$t('app.resizeCaptures')"
             @pointerdown="startCapturesResize"
           />
 
           <section v-if="capturesCollapsed" class="collapsed-pane bottom">
-            <button class="collapse-button" type="button" title="Show captures" @click="capturesCollapsed = false">
+            <button class="collapse-button" type="button" :title="$t('app.showCaptures')" @click="capturesCollapsed = false">
               <ChevronsUp :size="15" />
-              Captures
+              {{ $t('captures.show') }}
             </button>
           </section>
           <div v-else class="captures-shell">
@@ -301,12 +312,12 @@ function clamp(value: number, min: number, max: number): number {
           </div>
         </div>
 
-        <div class="split-handle vertical" title="Resize re-capture panel" @pointerdown="startRightResize" />
+        <div class="split-handle vertical" :title="$t('app.resizeRecapture')" @pointerdown="startRightResize" />
 
         <section v-if="rightCollapsed" class="collapsed-pane right">
-          <button class="collapse-button vertical-label" type="button" title="Show re-capture" @click="rightCollapsed = false">
+          <button class="collapse-button vertical-label" type="button" :title="$t('app.showRecapture')" @click="rightCollapsed = false">
             <ChevronsLeft :size="15" />
-            Re-capture
+            {{ $t('recapture.show') }}
           </button>
         </section>
         <div v-else class="sidebar-shell">
@@ -324,21 +335,40 @@ function clamp(value: number, min: number, max: number): number {
 
     <section v-else class="empty-state">
       <UploadCloud :size="34" />
-      <h2>Select a tape working directory</h2>
-      <p>
-        Analyse the overlapping captures for one physical tape, then drop new re-captures here to
-        copy them into the workspace and re-run analysis.
-      </p>
+      <h2>{{ $t('empty.title') }}</h2>
+      <p>{{ $t('empty.body') }}</p>
       <button class="primary-action" type="button" :disabled="workflow.busy" @click="workflow.pickDir">
         <FolderOpen :size="17" />
-        Choose directory
+        {{ $t('app.chooseDir') }}
       </button>
     </section>
 
     <div v-if="dragActive" class="drop-overlay">
       <UploadCloud :size="34" />
-      <strong>{{ workflow.dir ? 'Drop captures to ingest' : 'Choose a working directory first' }}</strong>
-      <span>{{ workflow.dir ? 'Files will be copied in, then analysis runs again.' : 'tapeflow needs a target tape workspace.' }}</span>
+      <strong>{{ workflow.dir ? $t('drop.ingest') : $t('drop.chooseFirst') }}</strong>
+      <span>{{ workflow.dir ? $t('drop.willCopy') : $t('drop.needWorkspace') }}</span>
     </div>
+
+    <Teleport to="body">
+      <div v-if="settingsOpen" class="modal-overlay" @click="settingsOpen = false">
+        <div class="modal-panel" @click.stop>
+          <div class="modal-head">
+            <h2>{{ $t('settings.title') }}</h2>
+            <button class="banner-close" type="button" :title="$t('settings.close')" @click="settingsOpen = false">
+              <X :size="16" />
+            </button>
+          </div>
+          <div class="setting-row">
+            <span class="setting-label">{{ $t('settings.language') }}</span>
+            <div class="setting-options">
+              <label v-for="p in LANG_PREFS" :key="p" class="radio-option" :class="{ active: langChoice === p }">
+                <input v-model="langChoice" type="radio" :value="p" @change="applyLang" />
+                <span>{{ $t(`lang.${p}`) }}</span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </main>
 </template>

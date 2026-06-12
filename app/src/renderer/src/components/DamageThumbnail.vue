@@ -50,11 +50,11 @@ function onClick(): void {
   <div
     class="thumb"
     :class="{ empty: !dataUrl, clickable: !!dataUrl }"
-    :title="dataUrl ? 'Click to enlarge' : error || 'No frame for this spot'"
+    :title="dataUrl ? $t('thumb.enlarge') : error || $t('thumb.noFrame')"
     @click.stop="onClick"
   >
     <img v-if="dataUrl" :src="dataUrl" alt="" />
-    <span v-else-if="loading" class="thumb-loading">Loading</span>
+    <span v-else-if="loading" class="thumb-loading">{{ $t('thumb.loading') }}</span>
     <span v-else class="thumb-empty">
       <ImageOff :size="18" />
     </span>

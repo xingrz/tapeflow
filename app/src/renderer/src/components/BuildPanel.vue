@@ -14,11 +14,11 @@ const emit = defineEmits<{ dismiss: [] }>()
   <section class="build-panel" :class="{ ok: result.ok, warn: !result.ok }" aria-label="Export result">
     <component :is="result.ok ? CheckCircle2 : AlertTriangle" :size="20" />
     <div class="build-panel-body">
-      <strong>{{ result.ok ? 'Export completed' : 'Export completed with warnings' }}</strong>
+      <strong>{{ result.ok ? $t('build.completed') : $t('build.completedWarnings') }}</strong>
       <p>{{ formatBytes(result.sizeBytes) }} | {{ verifySummary(result.verify) }}</p>
       <code>{{ result.output }}</code>
     </div>
-    <button class="banner-close" type="button" title="Dismiss" @click="emit('dismiss')">
+    <button class="banner-close" type="button" :title="$t('build.dismiss')" @click="emit('dismiss')">
       <X :size="15" />
     </button>
   </section>

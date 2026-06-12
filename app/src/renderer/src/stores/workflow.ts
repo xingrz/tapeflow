@@ -18,6 +18,7 @@ import {
   statusForSpot
 } from '../utils/analysis'
 import { formatDurationFrames, formatProgress } from '../utils/format'
+import { t } from '../i18n'
 
 export interface DamageView {
   spot: DamageSpot
@@ -85,18 +86,20 @@ export const useWorkflowStore = defineStore('workflow', () => {
 
   const verdictText = computed(() => {
     const a = analysis.value
-    if (!a && dir.value && busy.value) return 'Analysing workspace'
-    if (!a && dir.value) return 'Workspace selected'
-    if (!a) return 'Choose a working directory to analyse a tape.'
-    if (a.complete) return 'Complete - every tape position has a clean copy.'
+    if (!a && dir.value && busy.value) return t('verdict.analysing')
+    if (!a && dir.value) return t('verdict.selected')
+    if (!a) return t('verdict.choosePrompt')
+    if (a.complete) return t('verdict.complete')
     const spotCount = outstandingDamage.value.length
     const accepted = acceptedDamage.value.length
     const missingFrames = missingDamage.value.reduce((sum, view) => sum + view.spot.durationFrames, 0)
     const parts = [
-      `${spotCount} ${spotCount === 1 ? 'spot' : 'spots'} need re-capture`,
-      missingFrames ? `${formatDurationFrames(missingFrames, a.fps)} missing entirely` : null,
-      accepted ? `${accepted} accepted as unrecoverable` : null,
-      a.summary.unusedCaptures ? `${a.summary.unusedCaptures} unplaced captures` : null
+      t('verdict.spots', spotCount),
+      missingFrames
+        ? t('verdict.missingEntirely', { dur: formatDurationFrames(missingFrames, a.fps) })
+        : null,
+      accepted ? t('verdict.accepted', { count: accepted }) : null,
+      a.summary.unusedCaptures ? t('verdict.unplaced', { count: a.summary.unusedCaptures }) : null
     ].filter(Boolean)
     return parts.join(' | ')
   })
@@ -156,7 +159,7 @@ export const useWorkflowStore = defineStore('workflow', () => {
     error.value = ''
     buildResult.value = null
     ingestMessage.value = ''
-    progress.value = 'Starting analysis'
+    progress.value = t('progress.starting')
     markAllCaptures('pending')
     try {
       const result = await window.api.analyze(dir.value)
@@ -195,7 +198,7 @@ export const useWorkflowStore = defineStore('workflow', () => {
     error.value = ''
     buildResult.value = null
     ingestMessage.value = ''
-    progress.value = 'Exporting merged file'
+    progress.value = t('progress.exporting')
     try {
       buildResult.value = await window.api.build(dir.value, output)
     } catch (e) {
@@ -214,7 +217,7 @@ export const useWorkflowStore = defineStore('workflow', () => {
 
   async function ingestFiles(files: File[]): Promise<void> {
     if (!dir.value) {
-      error.value = 'Choose a working directory before dropping captures.'
+      error.value = t('errors.chooseDirFirst')
       return
     }
     if (busy.value || files.length === 0) return
@@ -224,16 +227,16 @@ export const useWorkflowStore = defineStore('workflow', () => {
     // .getPathForFile exposed from the preload (File.path was removed there).
     const paths = files.map((file) => (file as File & { path?: string }).path ?? '').filter(Boolean)
     if (paths.length === 0) {
-      error.value = 'No local file paths were available for the dropped files.'
+      error.value = t('errors.noPaths')
       return
     }
     busy.value = true
     error.value = ''
     buildResult.value = null
-    progress.value = `Copying ${paths.length} dropped capture${paths.length === 1 ? '' : 's'}`
+    progress.value = t('progress.copying', { count: paths.length })
     try {
       const copied = await window.api.ingest(dir.value, paths)
-      ingestMessage.value = `Copied ${copied.join(', ')}`
+      ingestMessage.value = t('progress.copied', { files: copied.join(', ') })
       await discoverWorkspaceCaptures()
     } catch (e) {
       error.value = toMessage(e)

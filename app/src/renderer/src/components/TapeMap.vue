@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Minus, Plus, Scan } from '@lucide/vue'
 import type { Capture, CaptureDamage, DamageSpot, TapeAnalysis } from '../types'
 import type { DamageView } from '../stores/workflow'
@@ -44,6 +45,8 @@ const emit = defineEmits<{
   select: [key: string]
 }>()
 
+const { t, locale } = useI18n()
+
 const wrap = ref<HTMLDivElement | null>(null)
 const headerCanvas = ref<HTMLCanvasElement | null>(null)
 const canvas = ref<HTMLCanvasElement | null>(null)
@@ -83,7 +86,11 @@ watch(
   { deep: true }
 )
 
+// the canvas is drawn imperatively, so a locale switch must trigger a redraw to re-label it
+watch(locale, () => draw())
+
 onMounted(() => {
+  colors = readMapColors()
   ro = new ResizeObserver((entries) => {
     width.value = Math.floor(entries[0]?.contentRect?.width ?? 0)
     draw()
@@ -271,6 +278,42 @@ function clampView(): void {
   viewMax.value = max
 }
 
+// The canvas can't use CSS, so the map palette lives in --map-* vars and is read here. Re-read on
+// mount (and a future theme toggle) so the canvas always matches the rest of the dark UI.
+function readMapColors() {
+  const s = getComputedStyle(document.documentElement)
+  const v = (n: string): string => s.getPropertyValue(n).trim()
+  return {
+    canvasBg: v('--map-header-bg'),
+    divider: v('--map-divider'),
+    grid: v('--map-grid'),
+    gridSoft: v('--map-grid-soft'),
+    tcText: v('--map-tc-text'),
+    recText: v('--map-rec-text'),
+    axisText: v('--map-axis-text'),
+    label: v('--map-label'),
+    resultBg: v('--map-result-bg'),
+    resultBgWarn: v('--map-result-bg-warn'),
+    resultSeg: v('--map-result-seg'),
+    resultSegGap: v('--map-result-seg-gap'),
+    lane: v('--map-lane'),
+    laneBorder: v('--map-lane-border'),
+    laneFocus: v('--map-lane-focus'),
+    laneFocusEdge: v('--map-lane-focus-edge'),
+    gap: v('--map-gap'),
+    gapStripe: v('--map-gap-stripe'),
+    gapBorder: v('--map-gap-border'),
+    damage: v('--map-damage'),
+    missing: v('--map-missing'),
+    missingStripe: v('--map-missing-stripe'),
+    residual: v('--map-residual'),
+    selectFill: v('--map-select-fill'),
+    selectEdge: v('--map-select-edge'),
+    selectBox: v('--map-select-box')
+  }
+}
+let colors = readMapColors()
+
 function draw(): void {
   if (!width.value) return
   drawHeader()
@@ -287,7 +330,7 @@ function prepare(c: HTMLCanvasElement, h: number): CanvasRenderingContext2D | nu
   if (!ctx) return null
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
   ctx.clearRect(0, 0, w, h)
-  ctx.fillStyle = '#ffffff'
+  ctx.fillStyle = colors.canvasBg
   ctx.fillRect(0, 0, w, h)
   return ctx
 }
@@ -301,7 +344,7 @@ function drawHeader(): void {
   drawRuler(ctx)
   drawResultTrack(ctx)
   drawSelectionEdges(ctx, 38, HEADER_H) // connect the selection band up through the result track
-  ctx.strokeStyle = '#e1e6e3'
+  ctx.strokeStyle = colors.divider
   ctx.lineWidth = 1
   ctx.beginPath()
   ctx.moveTo(0, HEADER_H - 0.5)
@@ -332,7 +375,7 @@ function selectedClip(): { x: number; w: number } | null {
 function drawSelectionFill(ctx: CanvasRenderingContext2D): void {
   const clip = selectedClip()
   if (!clip) return
-  ctx.fillStyle = 'rgba(168, 115, 32, 0.1)'
+  ctx.fillStyle = colors.selectFill
   ctx.fillRect(clip.x, 0, clip.w, lanesHeight.value)
 }
 
@@ -340,7 +383,7 @@ function drawSelectionEdges(ctx: CanvasRenderingContext2D, y0: number, y1: numbe
   const clip = selectedClip()
   if (!clip) return
   ctx.save()
-  ctx.strokeStyle = 'rgba(17, 23, 20, 0.4)'
+  ctx.strokeStyle = colors.selectEdge
   ctx.lineWidth = 1
   ctx.setLineDash([3, 3])
   ctx.beginPath()
@@ -361,7 +404,7 @@ function drawRuler(ctx: CanvasRenderingContext2D): void {
   const start = Math.ceil(viewMin.value / step) * step
   const tcStart = tcToSeconds(props.analysis.tape.tcStart, props.analysis.fps)
 
-  ctx.strokeStyle = '#d5dbd7'
+  ctx.strokeStyle = colors.grid
   ctx.lineWidth = 1
   ctx.beginPath()
   ctx.moveTo(plot.x, 30)
@@ -374,14 +417,14 @@ function drawRuler(ctx: CanvasRenderingContext2D): void {
   for (let v = start; v <= viewMax.value + step * 0.1; v += step) {
     const x = xForValue(v)
     if (x < plot.x - 1 || x > plot.x + plot.w + 1) continue
-    ctx.strokeStyle = '#cbd2ce'
+    ctx.strokeStyle = colors.gridSoft
     ctx.beginPath()
     ctx.moveTo(x, 23)
     ctx.lineTo(x, 36)
     ctx.stroke()
 
     const tcLabel = domain.value.mode === 'tc' ? secondsToTc(v, props.analysis.fps) : `${Math.round(v)}`
-    ctx.fillStyle = '#26312b'
+    ctx.fillStyle = colors.tcText
     ctx.fillText(tcLabel, clampedLabelX(ctx, tcLabel, x + 5, plot.x, plot.x + plot.w), 9)
 
     const rec = domain.value.mode === 'tc'
@@ -389,27 +432,27 @@ function drawRuler(ctx: CanvasRenderingContext2D): void {
       : null
     if (rec && plot.w >= 340) {
       const recLabel = rec.slice(11)
-      ctx.fillStyle = '#7a827d'
+      ctx.fillStyle = colors.recText
       ctx.font = '10px system-ui, -apple-system, sans-serif'
       ctx.fillText(recLabel, clampedLabelX(ctx, recLabel, x + 5, plot.x, plot.x + plot.w), 22)
       ctx.font = '11px ui-monospace, SFMono-Regular, Menlo, monospace'
     }
   }
 
-  ctx.fillStyle = '#4d5752'
+  ctx.fillStyle = colors.axisText
   ctx.font = '11px system-ui, -apple-system, sans-serif'
-  ctx.fillText(domain.value.mode === 'tc' ? 'Tape TC / clock' : 'Tape coordinate', 12, 16)
+  ctx.fillText(domain.value.mode === 'tc' ? t('map.tapeTcClock') : t('map.tapeCoordinate'), 12, 16)
 }
 
 function drawResultTrack(ctx: CanvasRenderingContext2D): void {
   const plot = plotRect()
   const y = 43
-  ctx.fillStyle = '#26312b'
+  ctx.fillStyle = colors.label
   ctx.font = '600 11px system-ui, -apple-system, sans-serif'
   ctx.textBaseline = 'middle'
-  ctx.fillText('Result', 12, y + 6)
+  ctx.fillText(t('map.result'), 12, y + 6)
 
-  ctx.fillStyle = props.analysis.complete ? '#d9e8df' : '#e7ece9'
+  ctx.fillStyle = props.analysis.complete ? colors.resultBg : colors.resultBgWarn
   roundedRect(ctx, plot.x, y, plot.w, 12, 2)
   ctx.fill()
 
@@ -420,7 +463,7 @@ function drawResultTrack(ctx: CanvasRenderingContext2D): void {
     if (!range) continue
     const clipped = clippedXRange(range)
     if (!clipped) continue
-    ctx.fillStyle = segment.gapBefore ? '#e6ebe8' : '#aecaba'
+    ctx.fillStyle = segment.gapBefore ? colors.resultSegGap : colors.resultSeg
     roundedRect(ctx, clipped.x, y + 2, clipped.w, 8, 2)
     ctx.fill()
   }
@@ -437,9 +480,9 @@ function drawCaptureLanes(ctx: CanvasRenderingContext2D): void {
     const y = LANE_TOP + index * LANE_STEP
     const focused = focusedCaptureTag.value === capture.tag
     if (focused) {
-      ctx.fillStyle = '#f1f5f2'
+      ctx.fillStyle = colors.laneFocus
       ctx.fillRect(6, y - 6, width.value - 12, LANE_STEP)
-      ctx.strokeStyle = '#748178'
+      ctx.strokeStyle = colors.laneFocusEdge
       ctx.strokeRect(plot.x - 1, y - 2, plot.w + 2, LANE_H + 4)
     }
     drawLaneLabel(ctx, capture, y)
@@ -447,10 +490,10 @@ function drawCaptureLanes(ctx: CanvasRenderingContext2D): void {
     // Draw each covered segment separately — the spaces between them are the capture's internal
     // drops (a continuity break can drop content), so the lane stops pretending to cover them.
     for (const seg of laneSegments(capture)) {
-      ctx.fillStyle = '#d8e0e6'
+      ctx.fillStyle = colors.lane
       roundedRect(ctx, seg.x, y, seg.w, LANE_H, 2)
       ctx.fill()
-      ctx.strokeStyle = '#9eb0bf'
+      ctx.strokeStyle = colors.laneBorder
       ctx.lineWidth = 1
       roundedRect(ctx, seg.x, y, seg.w, LANE_H, 2)
       ctx.stroke()
@@ -461,11 +504,11 @@ function drawCaptureLanes(ctx: CanvasRenderingContext2D): void {
     // reserved for the result's real `missing` (tape no capture has → re-capture needed); a TC hole
     // here is not missing tape and the merged output stitches across it.
     for (const gap of laneGaps(capture)) {
-      ctx.fillStyle = '#f0f2f0'
+      ctx.fillStyle = colors.gap
       roundedRect(ctx, gap.x, y, gap.w, LANE_H, 2)
       ctx.fill()
-      drawStripes(ctx, gap.x, y, gap.w, LANE_H, '#cdd4ce')
-      ctx.strokeStyle = '#dde2df'
+      drawStripes(ctx, gap.x, y, gap.w, LANE_H, colors.gapStripe)
+      ctx.strokeStyle = colors.gapBorder
       ctx.lineWidth = 1
       roundedRect(ctx, gap.x, y, gap.w, LANE_H, 2)
       ctx.stroke()
@@ -513,7 +556,7 @@ function drawCaptureDamageRun(ctx: CanvasRenderingContext2D, dmg: CaptureDamage,
   if (!range) return
   const clipped = clippedXRange(range, 4)
   if (!clipped) return
-  ctx.fillStyle = '#c0631f'
+  ctx.fillStyle = colors.damage
   roundedRect(ctx, clipped.x, y, clipped.w, h, 1)
   ctx.fill()
 }
@@ -526,7 +569,7 @@ function drawLaneLabel(ctx: CanvasRenderingContext2D, capture: Capture, y: numbe
   ctx.rect(10, y - 8, labelWidth, 18)
   ctx.clip()
   ctx.textBaseline = 'middle'
-  ctx.fillStyle = '#26312b'
+  ctx.fillStyle = colors.label
   ctx.font = '600 11px system-ui, -apple-system, sans-serif'
   ctx.fillText(fitText(ctx, capture.file || capture.tag, labelWidth), 12, y + 5)
   ctx.restore()
@@ -564,12 +607,12 @@ function drawDamageRegion(
   ctx.globalAlpha = accepted ? 0.35 : 1
   for (const piece of pieces) {
     if (spot.kind === 'missing') {
-      ctx.fillStyle = '#c76d64'
+      ctx.fillStyle = colors.missing
       roundedRect(ctx, piece.x, y, piece.w, h, 2)
       ctx.fill()
-      drawStripes(ctx, piece.x, y, piece.w, h)
+      drawStripes(ctx, piece.x, y, piece.w, h, colors.missingStripe)
     } else {
-      ctx.fillStyle = '#a87320'
+      ctx.fillStyle = colors.residual
       roundedRect(ctx, piece.x, y, piece.w, h, 2)
       ctx.fill()
     }
@@ -577,7 +620,7 @@ function drawDamageRegion(
   ctx.restore()
 
   if (selected) {
-    ctx.strokeStyle = '#111714'
+    ctx.strokeStyle = colors.selectBox
     ctx.lineWidth = 2
     roundedRect(ctx, clipped.x - 2, y - 3, clipped.w + 4, h + 6, 3)
     ctx.stroke()
@@ -594,7 +637,7 @@ function drawStripes(
   y: number,
   w: number,
   h: number,
-  color = '#9d3a34'
+  color = colors.missingStripe
 ): void {
   ctx.save()
   ctx.beginPath()
@@ -761,20 +804,20 @@ function clamp(value: number, min: number, max: number): number {
   <section class="panel timeline-panel" aria-label="Tape map">
     <div class="panel-title-row">
       <div>
-        <h2>Tape map</h2>
+        <h2>{{ $t('map.title') }}</h2>
         <p>
-          Drag to pan. Shift/Command/Ctrl + wheel zooms.
-          <span v-if="axisFallback">Some TC labels are missing, so layout falls back to engine axis.</span>
+          {{ $t('map.help') }}
+          <span v-if="axisFallback">{{ $t('map.axisFallback') }}</span>
         </p>
       </div>
       <div class="map-controls" aria-label="Map controls">
-        <button class="icon-button" type="button" title="Zoom out" @click="zoomBy(1.25)">
+        <button class="icon-button" type="button" :title="$t('map.zoomOut')" @click="zoomBy(1.25)">
           <Minus :size="15" />
         </button>
-        <button class="icon-button" type="button" title="Fit whole tape" @click="resetView">
+        <button class="icon-button" type="button" :title="$t('map.fit')" @click="resetView">
           <Scan :size="15" />
         </button>
-        <button class="icon-button" type="button" title="Zoom in" @click="zoomBy(0.8)">
+        <button class="icon-button" type="button" :title="$t('map.zoomIn')" @click="zoomBy(0.8)">
           <Plus :size="15" />
         </button>
       </div>
