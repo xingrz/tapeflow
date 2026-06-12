@@ -295,7 +295,6 @@ function readMapColors() {
     resultBg: v('--map-result-bg'),
     resultBgWarn: v('--map-result-bg-warn'),
     resultSeg: v('--map-result-seg'),
-    resultSegGap: v('--map-result-seg-gap'),
     lane: v('--map-lane'),
     laneBorder: v('--map-lane-border'),
     laneFocus: v('--map-lane-focus'),
@@ -463,7 +462,11 @@ function drawResultTrack(ctx: CanvasRenderingContext2D): void {
     if (!range) continue
     const clipped = clippedXRange(range)
     if (!clipped) continue
-    ctx.fillStyle = segment.gapBefore ? colors.resultSegGap : colors.resultSeg
+    // every covered segment is green — it just means "a clean copy exists here". Assembly seams
+    // between captures (hdvmerge's gapBefore, e.g. single GOPs spliced in to patch damage) are NOT
+    // a problem, so they're not singled out. Real missing/damage is drawn on top as the
+    // red/striped overlays below.
+    ctx.fillStyle = colors.resultSeg
     roundedRect(ctx, clipped.x, y + 2, clipped.w, 8, 2)
     ctx.fill()
   }
