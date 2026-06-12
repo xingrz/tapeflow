@@ -270,9 +270,41 @@ def _dv_capture(src, files_by_tag, fps):
         "recSpan": [src["rdt0"], src["rdt1"]],
         "health": [],
         "damage": _dv_capture_damage(src),
-        # DV coverage segments aren't exposed yet; one span until dvmerge surfaces per-input gaps
-        "ranges": [{"tcStart": src["tc0"], "tcEnd": src["tc1"]}],
+        # the TC runs this capture actually holds, split at its internal drops (dvmerge's per-input
+        # coverage); falls back to the whole span on an older dvmerge that doesn't surface it
+        "ranges": _capture_ranges(src),
     }
+
+
+def _dv_segments(dv, fps, damage):
+    """Synthesise result-track segments for DV: the tape span split at the truly-missing gaps (tape
+    no capture holds). dvrescue produces one continuous merged stream — there is no per-capture seam
+    chain as in HDV — so a 'segment' here is just a contiguous covered stretch of the output. This
+    gives the DV result track the same covered-vs-missing fill the HDV track shows, instead of a
+    flat empty bar. Only ``missing`` spots break coverage; ``dirty`` frames are present (just damaged)
+    and stay within a segment, drawn on top as damage."""
+    tape0, tape1 = dv.get("tc0"), dv.get("tc1")
+    if not tape0 or not tape1 or _tc_frames(tape1, fps) <= _tc_frames(tape0, fps):
+        return []
+    holes = sorted((d for d in damage if d["kind"] == "missing" and d["tcStart"] and d["tcEnd"]),
+                   key=lambda d: _tc_frames(d["tcStart"], fps))
+    title = _title(dv["files"])
+    bounds = []
+    cur = tape0
+    for d in holes:
+        if _tc_frames(d["tcStart"], fps) > _tc_frames(cur, fps):
+            bounds.append((cur, d["tcStart"]))
+        if _tc_frames(d["tcEnd"], fps) > _tc_frames(cur, fps):
+            cur = d["tcEnd"]
+    if _tc_frames(tape1, fps) > _tc_frames(cur, fps):
+        bounds.append((cur, tape1))
+    return [{
+        "tag": title,
+        "axis": [_tc_frames(a, fps), _tc_frames(b, fps)],
+        "tcSpan": [a, b],
+        "recSpan": [None, None],
+        "gapBefore": i > 0,   # a missing gap precedes this segment -> drawn in the seam colour
+    } for i, (a, b) in enumerate(bounds)]
 
 
 def from_dvmerge(dv, working_dir, files_by_tag):
@@ -299,7 +331,7 @@ def from_dvmerge(dv, working_dir, files_by_tag):
             "unusedCaptures": sum(1 for s in dv["sources"] if not s.get("aligned")),
         },
         "captures": [_dv_capture(s, files_by_tag, fps) for s in dv["sources"]],
-        "segments": [],
+        "segments": _dv_segments(dv, fps, damage),
         "damage": damage,
         "divergences": [],
     }

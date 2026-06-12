@@ -170,7 +170,11 @@ class TestNormalizeDv(unittest.TestCase):
         self.assertEqual(d["format"], "dv")
         self.assertTrue(d["complete"])
         self.assertTrue(d["buildable"])
-        self.assertEqual(d["segments"], [])              # DV has no segment chain
+        # a clean DV tape has no missing gaps -> one synthesised result segment spanning the whole
+        # tape (gives the result track a filled bar, like HDV, instead of an empty one)
+        self.assertEqual(len(d["segments"]), 1)
+        self.assertEqual(d["segments"][0]["tcSpan"], ["00:00:00:00", "00:00:40:00"])
+        self.assertFalse(d["segments"][0]["gapBefore"])
         self.assertEqual(d["damage"], [])
         self.assertEqual(d["tape"]["tcEnd"], "00:00:40:00")
         self.assertEqual([c["tag"] for c in d["captures"]], ["A-1", "A-2"])
@@ -195,6 +199,30 @@ class TestNormalizeDv(unittest.TestCase):
         self.assertEqual(spot["coverage"], [])
         self.assertEqual(spot["copies"], 0)
         self.assertEqual(d["summary"]["missingFrames"], 5)
+
+    def test_missing_gap_splits_result_segments(self):
+        # a missing span at 00:00:10 breaks the tape into two covered result segments around it
+        d = normalize.from_dvmerge(
+            _dv(spans=[_span("missing", cover=(), miss=5, dmg=0, bmax=0)], miss=5, complete=False),
+            "/work", {})
+        self.assertEqual(len(d["segments"]), 2)
+        self.assertEqual(d["segments"][0]["tcSpan"], ["00:00:00:00", "00:00:10:00"])
+        self.assertEqual(d["segments"][1]["tcSpan"], ["00:00:10:00", "00:00:40:00"])
+        self.assertFalse(d["segments"][0]["gapBefore"])
+        self.assertTrue(d["segments"][1]["gapBefore"])  # a missing gap precedes it -> seam colour
+
+    def test_capture_ranges_follow_dvmerge_coverage(self):
+        # dvmerge surfaces per-input coverage runs -> the capture lane shows them split at its drops
+        dv = _dv()
+        dv["sources"][0]["coverage"] = [{"tc0": "00:00:00:00", "tc1": "00:00:08:00"},
+                                        {"tc0": "00:00:20:00", "tc1": "00:00:30:00"}]
+        d = normalize.from_dvmerge(dv, "/work", {})
+        cap = next(c for c in d["captures"] if c["tag"] == "A-1")
+        self.assertEqual(cap["ranges"], [{"tcStart": "00:00:00:00", "tcEnd": "00:00:08:00"},
+                                         {"tcStart": "00:00:20:00", "tcEnd": "00:00:30:00"}])
+        # the other capture has no coverage field -> falls back to its whole span
+        other = next(c for c in d["captures"] if c["tag"] == "A-2")
+        self.assertEqual(other["ranges"], [{"tcStart": "00:00:10:00", "tcEnd": "00:00:40:00"}])
 
     def test_unaligned_source_counted(self):
         d = normalize.from_dvmerge(_dv(unaligned=True, complete=False), "/work", {})
