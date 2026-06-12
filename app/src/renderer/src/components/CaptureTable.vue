@@ -129,12 +129,9 @@ function compareMtime(a: number | undefined, b: number | undefined): number {
             <td>
               <span
                 v-if="capture.status === 'indexing'"
-                class="index-status indexing index-progress"
-                :title="$t('captures.indexingPct', { pct: Math.round(capture.progress * 100) })"
+                class="index-status indexing"
+                :style="{ '--p': `${Math.round(capture.progress * 100)}%` }"
               >
-                <span class="index-bar">
-                  <span class="index-bar-fill" :style="{ width: `${Math.round(capture.progress * 100)}%` }" />
-                </span>
                 {{ Math.round(capture.progress * 100) }}%
               </span>
               <span v-else class="index-status" :class="capture.status">{{ $t(`status.${capture.status}`) }}</span>

@@ -1176,8 +1176,11 @@ code,
 
 .index-status.indexing {
   border-color: var(--warn-border);
-  background: var(--warn-bg);
   color: var(--warn);
+  /* the pill itself IS the progress bar — filled (mid-amber) up to --p, track (dark) after — so the
+     badge keeps a fixed width instead of growing a separate bar + percentage */
+  background: linear-gradient(90deg, var(--warn-border) var(--p, 0%), var(--warn-bg) var(--p, 0%));
+  transition: background 0.12s linear;
 }
 
 .index-status.indexed,
@@ -1185,28 +1188,6 @@ code,
   border-color: var(--accent-border);
   background: var(--accent-bg);
   color: var(--accent);
-}
-
-.index-status.index-progress {
-  gap: 6px;
-  padding: 1px 6px 1px 4px;
-}
-
-.index-bar {
-  flex: 1 1 auto;
-  height: 5px;
-  min-width: 34px;
-  border-radius: 999px;
-  background: var(--warn-border);
-  overflow: hidden;
-}
-
-.index-bar-fill {
-  display: block;
-  height: 100%;
-  border-radius: 999px;
-  background: var(--warn);
-  transition: width 0.12s linear;
 }
 
 .drop-overlay {

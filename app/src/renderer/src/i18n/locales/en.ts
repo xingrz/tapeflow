@@ -86,8 +86,7 @@ export default {
     recordingTime: 'Recording time',
     format: 'Format',
     size: 'Size',
-    index: 'Index',
-    indexingPct: 'Indexing {pct}%'
+    index: 'Index'
   },
   status: {
     pending: 'pending',

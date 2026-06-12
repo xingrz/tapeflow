@@ -86,8 +86,7 @@ export default {
     recordingTime: '录制时间',
     format: '格式',
     size: '大小',
-    index: '索引',
-    indexingPct: '正在索引 {pct}%'
+    index: '索引'
   },
   status: {
     pending: '等待中',
