@@ -121,7 +121,8 @@ export const useWorkflowStore = defineStore('workflow', () => {
         const text = formatProgress(pr)
         if (text) progress.value = text
         if (pr.phase === 'building' || pr.phase === 'verifying') {
-          buildProgress.value = pr.phase === 'verifying' || !pr.total ? null : (pr.done ?? 0) / pr.total
+          buildProgress.value =
+            pr.phase === 'verifying' || !pr.total ? null : Math.min(1, (pr.done ?? 0) / pr.total)
         } else {
           updateCaptureProgress(pr)
         }

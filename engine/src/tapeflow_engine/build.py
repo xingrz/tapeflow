@@ -69,6 +69,30 @@ def _build_hdv(directory, files, output, notify):
     }
 
 
+def _dv_total_frames(files, cache_dir, dvrun):
+    """An expected output frame count for the export progress bar. Exact when a prior analyze cached
+    the merge log (one row per output frame); otherwise the longest raw .dv capture's frame count (a
+    raw .dv file is a whole number of fixed-size frames: 144000 PAL / 120000 NTSC)."""
+    try:
+        csv = os.path.join(cache_dir, "merge-%s.csv" % dvrun.signature(files))
+        if os.path.exists(csv):
+            with open(csv, "rb") as f:
+                n = sum(1 for _ in f)
+            if n > 1:
+                return n - 1   # minus the header row
+    except Exception:
+        pass
+    best = 0
+    for f in files:
+        try:
+            sz = os.path.getsize(f)
+        except OSError:
+            continue
+        fb = 144000 if sz % 144000 == 0 else (120000 if sz % 120000 == 0 else 144000)
+        best = max(best, sz // fb)
+    return best or 1
+
+
 def _build_dv(directory, files, output, notify):
     _bootstrap.ensure_engines_importable()
     if not shutil.which("dvrescue"):
@@ -76,9 +100,15 @@ def _build_dv(directory, files, output, notify):
     from dvmerge import run as dvrun
 
     cache_dir = os.path.join(directory, ".tapeflow", "dvmerge")
+    total = _dv_total_frames(files, cache_dir, dvrun)
+
+    def on_prog(done):
+        if notify:
+            notify("progress", {"phase": "building", "tool": "dvrescue", "done": done, "total": total})
+
     if notify:
-        notify("progress", {"phase": "building", "tool": "dvrescue"})
-    dvrun.analyze(files, output=output, cache_dir=cache_dir)   # keeps the merged .dv at `output`
+        notify("progress", {"phase": "building", "tool": "dvrescue", "total": total})
+    dvrun.analyze(files, output=output, cache_dir=cache_dir, on_progress=on_prog)
     return {
         "output": output,
         "format": "dv",
