@@ -28,14 +28,14 @@ jobs:
           - { os: ubuntu-latest, eb: '--linux', artifact: linux }
     steps:
       - name: Checkout (with engine submodules)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           submodules: recursive
 
       # 1) Freeze the Python sidecar (tapeflow_engine + hdvmerge + dvmerge) into a standalone binary,
       #    natively for this OS/arch, so the shipped app needs no Python.
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
       - name: Build sidecar (PyInstaller)
@@ -55,7 +55,7 @@ jobs:
 
       # 2) Build the Electron app and package it (the sidecar is copied in via extraResources).
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '20'
           cache: npm
@@ -75,7 +75,7 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
 
       - name: Upload installers
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: tapeflow-${{ matrix.artifact }}
           if-no-files-found: ignore
@@ -94,11 +94,11 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: artifacts
       - name: Publish release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: artifacts/**/*
           generate_release_notes: true
