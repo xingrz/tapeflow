@@ -47,8 +47,9 @@ Grab the latest build for your platform from the
 
 The builds aren't code-signed yet, so your OS will warn on first launch:
 
-- **macOS** — right-click the app and choose **Open** (just the first time); Gatekeeper remembers it
-  afterwards.
+- **macOS** — recent macOS no longer lets right-click → **Open** bypass Gatekeeper for unsigned
+  apps. After moving tapeflow to your Applications folder, clear its quarantine flag once in
+  Terminal: `sudo xattr -r -d com.apple.quarantine /Applications/tapeflow.app`
 - **Windows** — on the SmartScreen prompt, click **More info → Run anyway**.
 
 You'll also need a tool or two on your PATH — see [Requirements](#requirements).
