@@ -299,9 +299,6 @@ function readMapColors() {
     laneBorder: v('--map-lane-border'),
     laneFocus: v('--map-lane-focus'),
     laneFocusEdge: v('--map-lane-focus-edge'),
-    gap: v('--map-gap'),
-    gapStripe: v('--map-gap-stripe'),
-    gapBorder: v('--map-gap-border'),
     damage: v('--map-damage'),
     missing: v('--map-missing'),
     missingStripe: v('--map-missing-stripe'),
@@ -576,16 +573,16 @@ function drawCaptureLanes(ctx: CanvasRenderingContext2D): void {
       ctx.stroke()
     }
 
-    // a capture's internal TC discontinuities — drawn NEUTRAL grey, meaning "no footage carries
-    // these timecodes" (usually a camera stop / TC reset, where no tape exists). NOT red: red is
-    // reserved for the result's real `missing` (tape no capture has → re-capture needed); a TC hole
-    // here is not missing tape and the merged output stitches across it.
+    // where THIS capture has no footage (a coverage drop / internal TC discontinuity) — drawn in the
+    // same red stripes as the result's `missing`, so "missing footage" reads consistently across the
+    // result track and the lanes. Whether the merged output still covers it is shown by the result
+    // track staying green there (another capture filled it).
     for (const gap of laneGaps(capture)) {
-      ctx.fillStyle = colors.gap
+      ctx.fillStyle = colors.missing
       roundedRect(ctx, gap.x, y, gap.w, LANE_H, 2)
       ctx.fill()
-      drawStripes(ctx, gap.x, y, gap.w, LANE_H, colors.gapStripe)
-      ctx.strokeStyle = colors.gapBorder
+      drawStripes(ctx, gap.x, y, gap.w, LANE_H, colors.missingStripe)
+      ctx.strokeStyle = colors.missing
       ctx.lineWidth = 1
       roundedRect(ctx, gap.x, y, gap.w, LANE_H, 2)
       ctx.stroke()
