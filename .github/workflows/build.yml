@@ -20,7 +20,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Each macOS arch builds on a native-arch runner: PyInstaller can't cross-compile, so the
+          # frozen sidecar must be made on the arch it ships to (x64 on Intel, arm64 on M-series).
           - { os: macos-latest, eb: '--mac --arm64', artifact: macos-arm64 }
+          - { os: macos-15-intel, eb: '--mac --x64', artifact: macos-x64 }
           - { os: windows-latest, eb: '--win', artifact: windows }
           - { os: ubuntu-latest, eb: '--linux', artifact: linux }
     steps:
