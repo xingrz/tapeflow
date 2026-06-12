@@ -68,10 +68,19 @@ jobs:
         run: npm run build
       - name: Package (electron-builder)
         working-directory: app
-        run: npx electron-builder ${{ matrix.eb }} --publish never
+        shell: bash
+        # Retry: electron-builder's macOS DMG step intermittently fails with a flaky
+        # `hdiutil detach … Resource busy` when some process still holds the mounted volume.
+        run: |
+          n=0
+          until [ "$n" -ge 3 ]; do
+            npx electron-builder ${{ matrix.eb }} --publish never && exit 0
+            n=$((n + 1)); echo "electron-builder failed (attempt $n/3), retrying in 15s…"; sleep 15
+          done
+          exit 1
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # no code-signing certs yet — build unsigned (macOS users right-click → Open once)
+          # unsigned for now — see the README for the Gatekeeper / SmartScreen workaround
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
 
       - name: Upload installers

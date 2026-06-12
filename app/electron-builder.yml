@@ -23,9 +23,10 @@ extraResources:
 artifactName: ${productName}-${version}-${arch}.${ext}
 mac:
   icon: build/icon.icns
+  # dmg only. A `zip` target exists for electron auto-update (electron-updater pulls the zip,
+  # not the dmg); we don't ship auto-update, so it'd just double the macOS artifact.
   target:
     - dmg
-    - zip
   category: public.app-category.video
 win:
   icon: build/icon.ico
