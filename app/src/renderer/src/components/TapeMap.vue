@@ -923,17 +923,13 @@ function makeDomain(analysis: TapeAnalysis): Domain {
   for (const spot of analysis.damage) axisValues.push(spot.axis[0], spot.axis[1])
   const axisDomain = domainFromValues(axisValues)
 
-  // Lay out on the PHYSICAL axis when the tape has more than one recording session (tc restarts at a
-  // seam, so a tc axis would overlap or scatter the sessions), or when the tc span is stretched far
-  // past the actual frame count by a stray chunk at a wildly different tc. The ruler still labels in
-  // tc — via the per-position axisAnchors curve — so nothing is lost. Single-session tapes keep the
-  // tc axis exactly as before.
-  if (axisDomain) {
-    const physical = analysis.tape.durationFrames || 0
-    const fps = Math.max(1, Math.round(analysis.fps || 25))
-    const tcStretched =
-      !!tcDomain && physical > 0 && (tcDomain.max - tcDomain.min) * fps > physical * 1.5
-    if (analysis.tape.multiSession === true || tcStretched) return { mode: 'axis', ...axisDomain }
+  // Lay out on the PHYSICAL axis only when the engine flags the tape as multi-session AND supplies
+  // the per-position (tc, rec) anchor curve to label it (DV does both). tc restarts at a seam, so a
+  // tc axis would overlap or scatter the sessions; the physical axis keeps them adjacent and the
+  // ruler still reads tc via the anchors. Everything else — single-session DV, and all HDV (whose
+  // engine already orders islands by PCR, so it never stretches) — keeps the tc axis as before.
+  if (axisDomain && analysis.tape.multiSession === true && (analysis.tape.axisAnchors?.length ?? 0) > 0) {
+    return { mode: 'axis', ...axisDomain }
   }
 
   if (tcDomain) return { mode: 'tc', ...tcDomain }
