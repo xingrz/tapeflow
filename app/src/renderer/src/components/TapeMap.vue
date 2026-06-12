@@ -457,17 +457,14 @@ function drawResultTrack(ctx: CanvasRenderingContext2D): void {
 
   ctx.save()
   clipToPlot(ctx, plot, 0, HEADER_H)
-  for (const segment of props.analysis.segments) {
-    const range = rangeForTcOrAxis(segment.tcSpan, segment.axis)
-    if (!range) continue
-    const clipped = clippedXRange(range)
-    if (!clipped) continue
-    // every covered segment is green — it just means "a clean copy exists here". Assembly seams
-    // between captures (hdvmerge's gapBefore, e.g. single GOPs spliced in to patch damage) are NOT
-    // a problem, so they're not singled out. Real missing/damage is drawn on top as the
-    // red/striped overlays below.
-    ctx.fillStyle = colors.resultSeg
-    roundedRect(ctx, clipped.x, y + 2, clipped.w, 8, 2)
+  // Draw coverage as merged runs, not per-segment rectangles. Consecutive output segments meet at a
+  // GOP boundary, but each is only drawn to its last-GOP TC, so a ~1-GOP sliver is left between
+  // them that looks like a gap when zoomed in — the output is actually continuous there. Merging
+  // touching segments makes covered tape read as one solid green bar; genuine holes (missing tape)
+  // are larger, stay dark, and are drawn on top as the red/striped overlays below.
+  ctx.fillStyle = colors.resultSeg
+  for (const run of resultCoverageRuns()) {
+    roundedRect(ctx, run.x, y + 2, run.w, 8, 2)
     ctx.fill()
   }
   ctx.restore()
@@ -475,6 +472,33 @@ function drawResultTrack(ctx: CanvasRenderingContext2D): void {
   for (const view of props.damageViews) {
     drawDamageRegion(ctx, view.spot, view.key, y, 12, view.status === 'accepted', true)
   }
+}
+
+// Covered tape as merged x-runs (in screen space): adjacent output segments are coalesced so the
+// result bar is continuous, with only genuine missing gaps left dark. Works in both TC and axis
+// domains (axis segments already tile; TC ones leave the ~1-GOP sliver this closes).
+function resultCoverageRuns(): Array<{ x: number; w: number }> {
+  const fps = props.analysis.fps || 25
+  // ~1 s in the active domain's units — enough to bridge a one-GOP seam, far short of a real gap
+  const bridge = domain.value.mode === 'tc' ? 30 / fps : 1
+  const intervals: Array<[number, number]> = []
+  for (const segment of props.analysis.segments) {
+    const range = rangeForTcOrAxis(segment.tcSpan, segment.axis)
+    if (range) intervals.push(range)
+  }
+  intervals.sort((a, b) => a[0] - b[0])
+  const merged: Array<[number, number]> = []
+  for (const [a, b] of intervals) {
+    const last = merged[merged.length - 1]
+    if (last && a <= last[1] + bridge) last[1] = Math.max(last[1], b)
+    else merged.push([a, b])
+  }
+  const runs: Array<{ x: number; w: number }> = []
+  for (const m of merged) {
+    const clipped = clippedXRange(m)
+    if (clipped) runs.push(clipped)
+  }
+  return runs
 }
 
 function drawCaptureLanes(ctx: CanvasRenderingContext2D): void {
