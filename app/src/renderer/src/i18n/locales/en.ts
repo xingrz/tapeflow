@@ -52,7 +52,7 @@ export default {
     ingest: 'Drop captures to ingest',
     chooseFirst: 'Choose a working directory first',
     willCopy: 'Files will be copied in, then analysis runs again.',
-    needWorkspace: 'tapeflow needs a target tape workspace.'
+    needWorkspace: 'TapeFlow needs a target tape workspace.'
   },
   build: {
     completed: 'Export completed',

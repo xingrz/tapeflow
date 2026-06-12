@@ -1,5 +1,5 @@
-appId: com.xingrz.tapeflow
-productName: tapeflow
+appId: me.xingrz.tapeflow
+productName: TapeFlow
 # A publish provider must be set or electron-builder throws "Cannot read properties of null
 # (reading 'channel')" while generating auto-update metadata — even with `--publish never`. We don't
 # auto-publish from the build job (it uploads artifacts); the release job attaches them on a tag.

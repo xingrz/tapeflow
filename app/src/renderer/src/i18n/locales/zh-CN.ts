@@ -52,7 +52,7 @@ export default {
     ingest: '拖入采集文件以导入',
     chooseFirst: '请先选择一个工作目录',
     willCopy: '文件将被复制进来，随后重新运行分析。',
-    needWorkspace: 'tapeflow 需要一个目标磁带工作区。'
+    needWorkspace: 'TapeFlow 需要一个目标磁带工作区。'
   },
   build: {
     completed: '导出完成',
