@@ -23,6 +23,20 @@ export function formatBytes(bytes: number): string {
   return `${value.toFixed(i === 0 ? 0 : 2)} ${units[i]}`
 }
 
+export function formatSpeed(bytesPerSec: number): string {
+  if (!Number.isFinite(bytesPerSec) || bytesPerSec <= 0) return ''
+  return `${formatBytes(bytesPerSec)}/s`
+}
+
+export function formatEta(seconds: number | null): string {
+  if (seconds == null || !Number.isFinite(seconds) || seconds < 0) return ''
+  const s = Math.round(seconds)
+  if (s < 60) return `${s}s`
+  const m = Math.floor(s / 60)
+  if (m < 60) return `${m}:${String(s % 60).padStart(2, '0')}`
+  return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`
+}
+
 export function shortPath(path: string | null | undefined): string {
   if (!path) return t('app.noDir')
   const parts = path.split(/[\\/]/).filter(Boolean)
@@ -35,6 +49,7 @@ export function formatProgress(p: Progress): string {
   // names which file is being indexed (no percent)
   if (p.phase === 'index-start' && p.file) return t('progress.indexing', { file: p.file })
   if (p.phase === 'indexing') return ''
+  if (p.phase === 'copying') return '' // per-file copy bytes drive the task modal, not the topbar
   if (p.phase === 'indexed' && p.file) {
     return p.cached
       ? t('progress.usingCached', { file: p.file })

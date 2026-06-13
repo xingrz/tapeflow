@@ -111,7 +111,6 @@ function compareMtime(a: number | undefined, b: number | undefined): number {
             <th>{{ $t('captures.file') }}</th>
             <th>{{ $t('captures.format') }}</th>
             <th>{{ $t('captures.size') }}</th>
-            <th>{{ $t('captures.index') }}</th>
           </tr>
         </thead>
         <tbody>
@@ -126,16 +125,6 @@ function compareMtime(a: number | undefined, b: number | undefined): number {
             </td>
             <td>{{ capture.format.toUpperCase() }}</td>
             <td>{{ formatBytes(capture.sizeBytes) }}</td>
-            <td>
-              <span
-                v-if="capture.status === 'indexing'"
-                class="index-status indexing"
-                :style="{ '--p': `${Math.round(capture.progress * 100)}%` }"
-              >
-                {{ Math.round(capture.progress * 100) }}%
-              </span>
-              <span v-else class="index-status" :class="capture.status">{{ $t(`status.${capture.status}`) }}</span>
-            </td>
           </tr>
         </tbody>
       </table>

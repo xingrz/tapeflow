@@ -18,6 +18,7 @@ import {
 import BuildPanel from './components/BuildPanel.vue'
 import CaptureTable from './components/CaptureTable.vue'
 import DamageSidebar from './components/DamageSidebar.vue'
+import ProgressModal from './components/ProgressModal.vue'
 import TapeMap from './components/TapeMap.vue'
 import { useWorkflowStore, type DamageView } from './stores/workflow'
 import { formatDurationFrames } from './utils/format'
@@ -345,6 +346,8 @@ function clamp(value: number, min: number, max: number): number {
       <strong>{{ workflow.dir ? $t('drop.ingest') : $t('drop.chooseFirst') }}</strong>
       <span>{{ workflow.dir ? $t('drop.willCopy') : $t('drop.needWorkspace') }}</span>
     </div>
+
+    <ProgressModal :open="workflow.taskModalOpen" :tasks="workflow.taskList" />
 
     <Teleport to="body">
       <div v-if="settingsOpen" class="modal-overlay" @click="settingsOpen = false">

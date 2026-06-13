@@ -1,5 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
-import { copyFile, mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises'
+import { createReadStream, createWriteStream } from 'node:fs'
+import { pipeline } from 'node:stream/promises'
 import { basename, delimiter, extname, join, parse, resolve } from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { Sidecar } from './sidecar'
@@ -118,6 +120,26 @@ async function listCaptures(dir: string): Promise<object[]> {
   })
 }
 
+// Stream-copy src -> dest, sending throttled `{phase:'copying', file, done, total}` progress so the
+// renderer can show a per-file copy bar with speed / ETA. A final 100% event always fires.
+async function copyWithProgress(src: string, dest: string, file: string): Promise<void> {
+  const total = (await stat(src)).size
+  const rs = createReadStream(src)
+  const ws = createWriteStream(dest)
+  let done = 0
+  let last = 0
+  rs.on('data', (chunk) => {
+    done += chunk.length
+    const now = Date.now()
+    if (now - last >= 120) {
+      last = now
+      win?.webContents.send('progress', { phase: 'copying', file, done, total })
+    }
+  })
+  await pipeline(rs, ws)
+  win?.webContents.send('progress', { phase: 'copying', file, done: total, total })
+}
+
 function createWindow(): void {
   const isMac = process.platform === 'darwin'
   win = new BrowserWindow({
@@ -164,12 +186,13 @@ app.whenReady().then(() => {
   )
   ipcMain.handle('listCaptures', (_e, dir: string) => listCaptures(dir))
   // Drag-drop ingest: copy dropped capture files into the working dir (Node fs, in main), so the
-  // renderer can then re-analyze. Returns the copied basenames.
+  // renderer can then re-analyze. Streams each copy and reports byte progress so the UI can show a
+  // speed / ETA bar (a big capture is many GB). Returns the copied basenames.
   ipcMain.handle('ingest', async (_e, dir: string, srcPaths: string[]) => {
     const copied: string[] = []
     for (const src of srcPaths) {
       const name = basename(src)
-      await copyFile(src, join(dir, name))
+      await copyWithProgress(src, join(dir, name), name)
       copied.push(name)
     }
     return copied

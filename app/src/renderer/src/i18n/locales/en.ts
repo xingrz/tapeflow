@@ -94,6 +94,18 @@ export default {
     indexed: 'indexed',
     cached: 'cached'
   },
+  tasks: {
+    title: 'Preparing workspace',
+    hint: 'Copying and indexing the captures — this stays open until every file is ready.',
+    dvLabel: 'dvrescue merge',
+    remaining: '{eta} left',
+    stage: {
+      copying: 'copying',
+      indexing: 'indexing',
+      merging: 'merging',
+      done: 'done'
+    }
+  },
   recapture: {
     title: 'Re-capture',
     show: 'Re-capture',
