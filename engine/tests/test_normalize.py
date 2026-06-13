@@ -261,12 +261,14 @@ class TestNormalizeDv(unittest.TestCase):
 
     def test_capture_carries_its_own_damage_runs(self):
         dv = _dv()
-        dv["sources"][0]["damage"] = [{"tc0": "00:00:10:00", "tc1": "00:00:11:00", "frames": 25}]
+        dv["sources"][0]["damage"] = [
+            {"tc0": "00:00:10:00", "tc1": "00:00:11:00", "pf0": 250, "pf1": 275, "frames": 25}]
         d = normalize.from_dvmerge(dv, "/work", {})
         cap = next(c for c in d["captures"] if c["tag"] == "A-1")
         self.assertEqual(len(cap["damage"]), 1)
         self.assertEqual(cap["damage"][0]["tcStart"], "00:00:10:00")
         self.assertEqual(cap["damage"][0]["severity"], "mosaic")
+        self.assertEqual(cap["damage"][0]["axis"], [250, 275])   # physical span, for axis-mode lanes
 
 
 if __name__ == "__main__":

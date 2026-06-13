@@ -262,9 +262,11 @@ def _dv_damage(dv):
 
 
 def _dv_capture_damage(src):
-    """This capture's OWN mosaic runs (Status 'P'), by tape TC — shown on its lane regardless of
-    whether the merge repaired it from another copy."""
-    return [{"tcStart": d.get("tc0"), "tcEnd": d.get("tc1"), "severity": "mosaic"}
+    """This capture's OWN mosaic runs (Status 'P'), shown on its lane regardless of whether the merge
+    repaired it from another copy — tc for labels, pf for the physical layout so a capture that is
+    damaged throughout (a bad transfer) reads as mosaic the whole length of its lane."""
+    return [{"tcStart": d.get("tc0"), "tcEnd": d.get("tc1"), "severity": "mosaic",
+             "axis": [d.get("pf0"), d.get("pf1")]}
             for d in src.get("damage", [])]
 
 

@@ -732,7 +732,9 @@ function laneGaps(capture: Capture): Array<{ x: number; w: number }> {
 }
 
 function drawCaptureDamageRun(ctx: CanvasRenderingContext2D, dmg: CaptureDamage, y: number, h: number): void {
-  const range = rangeForTcOrAxis([dmg.tcStart, dmg.tcEnd], [Number.NaN, Number.NaN])
+  // tc mode reads the run's tc span; the physical (DV multi-session) layout reads its pf span, so a
+  // capture damaged throughout shows mosaic along its whole lane there too
+  const range = rangeForTcOrAxis([dmg.tcStart, dmg.tcEnd], dmg.axis ?? [Number.NaN, Number.NaN])
   if (!range) return
   const clipped = clippedXRange(range, 4)
   if (!clipped) return

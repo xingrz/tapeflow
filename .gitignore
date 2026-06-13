@@ -22,3 +22,6 @@ release/
 # OS
 .DS_Store
 Thumbs.db
+
+# Playwright MCP verification artifacts
+.playwright-mcp/
