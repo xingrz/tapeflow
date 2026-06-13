@@ -7,7 +7,7 @@ that the Electron UI renders without caring which format it came from. It speaks
 as newline-delimited JSON over stdio (see :mod:`tapeflow_engine.rpc`).
 """
 
-__version__ = "1.0.1"
+__version__ = "1.0.2"
 
 # The unified contract between the sidecar and the renderer. Versioned: reshaping it is a breaking
 # change across the process boundary, so bump to /2 rather than silently changing fields.
