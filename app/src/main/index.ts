@@ -184,6 +184,9 @@ app.whenReady().then(() => {
   ipcMain.handle('thumbnail', (_e, dir: string, file: string, seconds: number, maxWidth?: number) =>
     sidecar!.call('thumbnail', { dir, file, seconds, maxWidth })
   )
+  ipcMain.handle('damageFrame', (_e, dir: string, file: string, seconds: number, fps: number) =>
+    sidecar!.call('damageFrame', { dir, file, seconds, fps })
+  )
   ipcMain.handle('listCaptures', (_e, dir: string) => listCaptures(dir))
   // Drag-drop ingest: copy dropped capture files into the working dir (Node fs, in main), so the
   // renderer can then re-analyze. Streams each copy and reports byte progress so the UI can show a

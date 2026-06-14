@@ -16,6 +16,7 @@ const emit = defineEmits<{
 const loading = ref(false)
 const error = ref('')
 const dataUrl = ref('')
+const highlighted = ref(false)
 
 const request = computed(() => thumbnailRequest(props.analysis, props.spot))
 
@@ -28,12 +29,20 @@ watch(
 async function load(): Promise<void> {
   dataUrl.value = ''
   error.value = ''
+  highlighted.value = false
   const req = request.value
   if (!req) return
   loading.value = true
   try {
-    const thumb = await window.api.thumbnail(props.analysis.dir, req.file, req.seconds)
+    // DV frames come back with the error-concealment regions highlighted (dvplay); HDV is plain
+    const thumb = await window.api.damageFrame(
+      props.analysis.dir,
+      req.file,
+      req.seconds,
+      props.analysis.fps
+    )
     dataUrl.value = thumb.dataUrl
+    highlighted.value = !!thumb.highlighted
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e)
   } finally {
@@ -50,7 +59,7 @@ function onClick(): void {
   <div
     class="thumb"
     :class="{ empty: !dataUrl, clickable: !!dataUrl }"
-    :title="dataUrl ? $t('thumb.enlarge') : error || $t('thumb.noFrame')"
+    :title="dataUrl ? (highlighted ? $t('thumb.highlighted') : $t('thumb.enlarge')) : error || $t('thumb.noFrame')"
     @click.stop="onClick"
   >
     <img v-if="dataUrl" :src="dataUrl" alt="" />

@@ -86,7 +86,14 @@ export default {
     recordingTime: 'Recording time',
     format: 'Format',
     size: 'Size',
-    index: 'Index'
+    index: 'Index',
+    quality: {
+      persistent: 'damaged ~{pct}/frame',
+      intermittent: '{pct} of frames damaged',
+      headEven: 'even-field biased',
+      headOdd: 'odd-field biased',
+      tip: 'concealed ({method}) · {concealed}/{seen} frames · even-field share {even}'
+    }
   },
   status: {
     pending: 'pending',
@@ -132,6 +139,7 @@ export default {
   },
   thumb: {
     enlarge: 'Click to enlarge',
+    highlighted: 'Error-concealment regions are highlighted in yellow · click to enlarge',
     noFrame: 'No frame for this spot',
     loading: 'Loading'
   },

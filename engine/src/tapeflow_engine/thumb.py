@@ -13,6 +13,42 @@ import os
 import shutil
 import subprocess
 
+DV_EXTS = (".dv", ".dif")
+
+
+def damage_frame(params, notify=None):
+    """``{dir, file, seconds=0, fps=25}`` -> ``{dataUrl, file, seconds, highlighted}``.
+
+    For a DV capture, render the frame with dvrescue's error-concealment regions highlighted in
+    yellow (via ``dvplay -b <byteOffset> -O -``), so the damage view shows *where* the damage is —
+    not just a count. dvplay needs the frame's byte offset; DV is frame-aligned (PAL DV25 = 144000
+    bytes/frame, NTSC = 120000), so it's ``round(seconds*fps) * frameSize``. Falls back to the plain
+    ffmpeg thumbnail for HDV or when dvplay is absent (``highlighted: False``)."""
+    directory = params.get("dir")
+    file = params.get("file")
+    if not directory or not file:
+        raise ValueError("damageFrame requires 'dir' and 'file'")
+    path = os.path.join(directory, file)
+    if not os.path.isfile(path):
+        raise ValueError("no such capture: %s" % file)
+    seconds = float(params.get("seconds") or 0)
+    fps = float(params.get("fps") or 25)
+    is_dv = os.path.splitext(file)[1].lower() in DV_EXTS
+    if is_dv and shutil.which("dvplay"):
+        frame_size = 144000 if round(fps or 25) == 25 else 120000
+        byte = max(0, round(seconds * round(fps or 25))) * frame_size
+        proc = subprocess.run(["dvplay", "-b", str(byte), "-O", "-", path],
+                              stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        if proc.returncode == 0 and proc.stdout[:2] == b"\xff\xd8":   # a real JPEG (SOI marker)
+            return {"file": file, "seconds": seconds, "highlighted": True,
+                    "dataUrl": "data:image/jpeg;base64,"
+                    + base64.b64encode(proc.stdout).decode("ascii")}
+    # HDV, or dvplay missing/failed: plain frame, no highlight
+    out = thumbnail({"dir": directory, "file": file, "seconds": seconds,
+                     "maxWidth": params.get("maxWidth")}, notify)
+    out["highlighted"] = False
+    return out
+
 
 def thumbnail(params, notify=None):
     """``{"dir", "file", "seconds"=0, "maxWidth"=320}`` -> ``{"dataUrl", "file", "seconds"}``."""

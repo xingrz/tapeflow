@@ -18,6 +18,8 @@ declare global {
       analyze: (dir: string) => Promise<TapeAnalysis>
       build: (dir: string, output: string) => Promise<BuildResult>
       thumbnail: (dir: string, file: string, seconds: number, maxWidth?: number) => Promise<Thumbnail>
+      // DV: frame with error-concealment regions highlighted (dvplay); HDV: plain frame
+      damageFrame: (dir: string, file: string, seconds: number, fps: number) => Promise<Thumbnail>
       listCaptures: (dir: string) => Promise<WorkspaceCapture[]>
       // copy dropped capture files into the working dir; returns the copied basenames
       ingest: (dir: string, srcPaths: string[]) => Promise<string[]>

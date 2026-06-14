@@ -70,9 +70,14 @@ def thumbnail(params, notify=None):
     return thumbmod.thumbnail(params, notify=notify)
 
 
+def damageFrame(params, notify=None):
+    return thumbmod.damage_frame(params, notify=notify)
+
+
 METHODS = {
     "capabilities": capabilities,
     "analyze": analyze,
     "build": build,
     "thumbnail": thumbnail,
+    "damageFrame": damageFrame,
 }

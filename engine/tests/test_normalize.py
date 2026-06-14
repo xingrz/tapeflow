@@ -270,6 +270,20 @@ class TestNormalizeDv(unittest.TestCase):
         self.assertEqual(cap["damage"][0]["severity"], "mosaic")
         self.assertEqual(cap["damage"][0]["axis"], [250, 275])   # physical span, for axis-mode lanes
 
+    def test_capture_carries_error_profile(self):
+        # dvmerge attaches the STA concealment profile from dvrescue's -x XML to each source
+        dv = _dv()
+        dv["sources"][0]["errorProfile"] = {
+            "concealedFrac": 1.0, "avgConcealedPct": 0.19, "evenSharePct": 0.49,
+            "staCode": 10, "staMethod": "prev-frame*"}
+        d = normalize.from_dvmerge(dv, "/work", {})
+        cap = next(c for c in d["captures"] if c["tag"] == "A-1")
+        self.assertEqual(cap["errorProfile"]["staMethod"], "prev-frame*")
+        self.assertEqual(cap["errorProfile"]["concealedFrac"], 1.0)
+        # a source with no profile (HDV-like) carries none
+        other = next(c for c in d["captures"] if c["tag"] == "A-2")
+        self.assertNotIn("errorProfile", other)
+
 
 if __name__ == "__main__":
     unittest.main()

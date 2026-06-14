@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { ChevronsDown, Film, Link2, Unlink } from '@lucide/vue'
-import type { Capture, TapeAnalysis } from '../types'
+import { useI18n } from 'vue-i18n'
+import type { Capture, ErrorProfile, TapeAnalysis } from '../types'
 import type { WorkspaceCaptureView } from '../stores/workflow'
 import { formatBytes } from '../utils/format'
 import { formatRecordingTime } from '../utils/timecode'
@@ -15,6 +16,32 @@ const emit = defineEmits<{
   selectCapture: [tag: string]
   collapse: []
 }>()
+
+const { t } = useI18n()
+
+// A compact per-capture quality chip from the DV error-concealment profile: how heavily concealed
+// (persistent vs intermittent), and an azimuth-head bias note when the damage favours one field.
+function quality(profile?: ErrorProfile): { text: string; level: 'warn' | 'note'; title: string } | null {
+  if (!profile || profile.concealedFrac <= 0) return null
+  const pct = (v: number): string => `${Math.round(v * 100)}%`
+  const persistent = profile.concealedFrac >= 0.7
+  const text = persistent
+    ? t('captures.quality.persistent', { pct: pct(profile.avgConcealedPct) })
+    : t('captures.quality.intermittent', { pct: pct(profile.concealedFrac) })
+  const bias =
+    profile.evenSharePct >= 0.65
+      ? t('captures.quality.headEven')
+      : profile.evenSharePct <= 0.35
+        ? t('captures.quality.headOdd')
+        : ''
+  const title = t('captures.quality.tip', {
+    method: profile.staMethod,
+    concealed: profile.framesConcealed,
+    seen: profile.framesSeen,
+    even: pct(profile.evenSharePct)
+  })
+  return { text: bias ? `${text} · ${bias}` : text, level: persistent ? 'warn' : 'note', title }
+}
 
 const sortedAnalysisCaptures = computed<Capture[]>(() => {
   if (!props.analysis) return []
@@ -94,6 +121,12 @@ function compareMtime(a: number | undefined, b: number | undefined): number {
                 <Film :size="16" />
                 <div>
                   <strong :title="captureTitle(capture.file, capture.tag)">{{ capture.file }}</strong>
+                  <span
+                    v-if="quality(capture.errorProfile)"
+                    class="cap-quality"
+                    :class="quality(capture.errorProfile)!.level"
+                    :title="quality(capture.errorProfile)!.title"
+                  >{{ quality(capture.errorProfile)!.text }}</span>
                 </div>
               </div>
             </td>
@@ -132,3 +165,24 @@ function compareMtime(a: number | undefined, b: number | undefined): number {
 
   </section>
 </template>
+
+<style scoped>
+.cap-quality {
+  display: inline-block;
+  margin-top: 2px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: nowrap;
+  cursor: help;
+}
+.cap-quality.warn {
+  color: var(--warn, #e0a23a);
+  background: color-mix(in srgb, var(--warn, #e0a23a) 16%, transparent);
+}
+.cap-quality.note {
+  color: var(--text-muted, #9aa6a0);
+  background: color-mix(in srgb, var(--text-muted, #9aa6a0) 14%, transparent);
+}
+</style>

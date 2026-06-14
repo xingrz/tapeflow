@@ -26,6 +26,18 @@ export interface HealthRun {
   state: string
 }
 
+// Per-capture DV error-concealment profile (from dvrescue's -x XML; absent for HDV). How heavily and
+// by which STA method this transfer is concealed, and the even/odd DIF-sequence (azimuth-head) split.
+export interface ErrorProfile {
+  framesSeen: number
+  framesConcealed: number
+  concealedFrac: number // 0..1 of frames carrying any concealed block
+  avgConcealedPct: number // 0..1, mean concealed blocks/frame over concealed frames
+  evenSharePct: number // 0..1, share of concealed blocks on even DIF sequences (azimuth split)
+  staCode: number
+  staMethod: string
+}
+
 export interface Capture {
   tag: string
   file: string
@@ -38,6 +50,7 @@ export interface Capture {
   // the TC segments this capture actually holds — split at internal drops, so the lane shows real
   // gaps instead of one solid bar (a continuity break can drop content). axis = physical span (DV)
   ranges: { tcStart: string | null; tcEnd: string | null; axis?: [number, number] }[]
+  errorProfile?: ErrorProfile
 }
 
 // one damaged run within a single capture, by tape TC (axis = its physical span, for axis layout)
@@ -146,7 +159,8 @@ export interface BuildResult {
 export interface Thumbnail {
   file: string
   seconds: number
-  dataUrl: string // a PNG data: URL
+  dataUrl: string // a PNG (plain) or JPEG (dvplay highlighted) data: URL
+  highlighted?: boolean // true when the DV error-concealment regions are drawn (dvplay)
 }
 
 export type ChecklistStatus = 'outstanding' | 'accepted' | 'covered'

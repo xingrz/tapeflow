@@ -11,6 +11,8 @@ contextBridge.exposeInMainWorld('api', {
   build: (dir: string, output: string) => ipcRenderer.invoke('build', dir, output),
   thumbnail: (dir: string, file: string, seconds: number, maxWidth?: number) =>
     ipcRenderer.invoke('thumbnail', dir, file, seconds, maxWidth),
+  damageFrame: (dir: string, file: string, seconds: number, fps: number) =>
+    ipcRenderer.invoke('damageFrame', dir, file, seconds, fps),
   listCaptures: (dir: string) => ipcRenderer.invoke('listCaptures', dir),
   ingest: (dir: string, srcPaths: string[]) => ipcRenderer.invoke('ingest', dir, srcPaths),
   loadState: (dir: string) => ipcRenderer.invoke('loadState', dir),

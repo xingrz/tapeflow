@@ -86,7 +86,14 @@ export default {
     recordingTime: '录制时间',
     format: '格式',
     size: '大小',
-    index: '索引'
+    index: '索引',
+    quality: {
+      persistent: '每帧约 {pct} 损坏',
+      intermittent: '{pct} 的帧有损坏',
+      headEven: '偏偶场',
+      headOdd: '偏奇场',
+      tip: '隐藏方式 {method} · {concealed}/{seen} 帧含损坏 · 偶场占 {even}'
+    }
   },
   status: {
     pending: '等待中',
@@ -132,6 +139,7 @@ export default {
   },
   thumb: {
     enlarge: '点击放大',
+    highlighted: '错误隐藏区域以黄色高亮 · 点击放大',
     noFrame: '此处无可用画面',
     loading: '加载中'
   },

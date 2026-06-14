@@ -281,7 +281,7 @@ def _dv_capture(src, files_by_tag):
                for c in cov]
               or [{"tcStart": src["tc0"], "tcEnd": src["tc1"],
                    "axis": [src.get("pf0", 0), src.get("pf1", 0)]}])
-    return {
+    out = {
         "tag": tag,
         "file": files_by_tag.get(tag, tag),
         "axis": [src.get("pf0", 0), src.get("pf1", 0)],
@@ -293,6 +293,11 @@ def _dv_capture(src, files_by_tag):
         # layout (falls back to the whole span on an older dvmerge that doesn't surface coverage)
         "ranges": ranges,
     }
+    # the STA concealment profile from dvrescue's -x XML (how heavily/by which method this pass is
+    # concealed, and the azimuth split) — characterises each transfer (HDV captures have none)
+    if src.get("errorProfile"):
+        out["errorProfile"] = src["errorProfile"]
+    return out
 
 
 def _dv_segments(dv):
