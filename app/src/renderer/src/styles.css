@@ -205,6 +205,44 @@ code,
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  gap: 6px;
+}
+
+/* the archive completeness marker — a colour-tiered, click-to-copy pill (e.g. "(TF99%-3)") */
+.archive-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 4px 9px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  font-family: "SFMono-Regular", Consolas, ui-monospace, monospace;
+  font-size: 12px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+}
+
+.archive-badge.green {
+  border-color: var(--accent-border);
+  background: var(--accent-bg);
+  color: var(--accent-strong);
+}
+
+.archive-badge.yellow {
+  border-color: var(--warn-border);
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+
+.archive-badge.red {
+  border-color: var(--danger-border);
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.archive-badge:hover {
+  border-color: currentColor;
 }
 
 .path-name {

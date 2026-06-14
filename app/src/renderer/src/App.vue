@@ -21,11 +21,21 @@ import DamageSidebar from './components/DamageSidebar.vue'
 import ProgressModal from './components/ProgressModal.vue'
 import TapeMap from './components/TapeMap.vue'
 import { useWorkflowStore, type DamageView } from './stores/workflow'
+import { archiveTag } from './utils/analysis'
 import { formatDurationFrames } from './utils/format'
 import { LANG_PREFS, langPref, setLangPref, type LangPref } from './i18n'
 
 const workflow = useWorkflowStore()
 const settingsOpen = ref(false)
+
+// the archive completeness marker (e.g. "(TF99%-3)"), shown as a colour-tiered status badge in the
+// title bar; the export name carries the same tag, so the badge is read-only. null until a tape with
+// real extent is analysed
+const archive = computed(() =>
+  workflow.analysis && workflow.analysis.tape.durationFrames > 0
+    ? archiveTag(workflow.analysis)
+    : null
+)
 const langChoice = ref<LangPref>(langPref())
 function applyLang(): void {
   setLangPref(langChoice.value)
@@ -212,6 +222,9 @@ function clamp(value: number, min: number, max: number): number {
       </div>
 
       <div class="topbar-end">
+        <span v-if="archive" class="archive-badge" :class="archive.tier">
+          {{ archive.short }}
+        </span>
         <button class="icon-button" type="button" :title="$t('app.settings')" @click="settingsOpen = true">
           <Settings :size="16" />
         </button>
