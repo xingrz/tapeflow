@@ -1238,6 +1238,31 @@ code,
   background: #000;
 }
 
+.lightbox-stage {
+  position: relative;
+  display: flex;
+}
+
+.lightbox-stage.comparable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.lightbox-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 10px;
+  transform: translateX(-50%);
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.62);
+  color: #fff;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
 .lightbox-loading {
   display: grid;
   place-items: center;

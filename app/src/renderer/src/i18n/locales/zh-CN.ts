@@ -131,7 +131,9 @@ export default {
     copiesRequired: '0 个拷贝——需要补采',
     dirtyCopies: '{n} 个损坏拷贝',
     close: '关闭',
-    loadingFrame: '正在加载画面…'
+    loadingFrame: '正在加载画面…',
+    holdToCompare: '按住查看原图',
+    showingOriginal: '原始画面 · 松手恢复标记'
   },
   kind: {
     dirty: '损坏',

@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Check, ChevronsRight, Clipboard, RotateCcw, X } from '@lucide/vue'
-import type { TapeAnalysis } from '../types'
+import { Check, ChevronsRight, Clipboard, RotateCcw } from '@lucide/vue'
+import type { DamageSpot, TapeAnalysis } from '../types'
 import type { DamageView } from '../stores/workflow'
 import DamageThumbnail from './DamageThumbnail.vue'
-import { thumbnailRequest } from '../utils/analysis'
+import DamageLightbox from './DamageLightbox.vue'
 import { formatDurationFrames } from '../utils/format'
 import { formatRecordingTime } from '../utils/timecode'
 
@@ -60,25 +60,7 @@ async function copyTc(view: DamageView): Promise<void> {
   }
 }
 
-const lightbox = ref<{ src: string; label: string } | null>(null)
-
-async function openLightbox(view: DamageView): Promise<void> {
-  if (!props.analysis) return
-  const req = thumbnailRequest(props.analysis, view.spot)
-  if (!req) return
-  const label = `${view.spot.tcStart ?? ''} · ${view.spot.severity || t('recapture.damage')}`
-  lightbox.value = { src: '', label } // shows the loader until the hi-res frame arrives
-  try {
-    const thumb = await window.api.thumbnail(props.analysis.dir, req.file, req.seconds, 1280)
-    if (lightbox.value) lightbox.value = { src: thumb.dataUrl, label }
-  } catch {
-    lightbox.value = null
-  }
-}
-
-function closeLightbox(): void {
-  lightbox.value = null
-}
+const lightboxSpot = ref<DamageSpot | null>(null)
 
 onUnmounted(() => clearTimeout(copyTimer))
 
@@ -119,7 +101,7 @@ function scrollSelectedIntoView(): void {
           v-if="analysis"
           :analysis="analysis"
           :spot="view.spot"
-          @enlarge="openLightbox(view)"
+          @enlarge="lightboxSpot = view.spot"
         />
         <div v-else class="thumb empty" />
         <div class="damage-main">
@@ -161,16 +143,10 @@ function scrollSelectedIntoView(): void {
     </div>
   </aside>
 
-  <Teleport to="body">
-    <div v-if="lightbox" class="lightbox" @click="closeLightbox">
-      <div class="lightbox-inner" @click.stop>
-        <button class="lightbox-close" type="button" :title="$t('recapture.close')" @click="closeLightbox">
-          <X :size="18" />
-        </button>
-        <img v-if="lightbox.src" :src="lightbox.src" alt="" />
-        <div v-else class="lightbox-loading">{{ $t('recapture.loadingFrame') }}</div>
-        <p class="lightbox-label">{{ lightbox.label }}</p>
-      </div>
-    </div>
-  </Teleport>
+  <DamageLightbox
+    v-if="lightboxSpot && analysis"
+    :analysis="analysis"
+    :spot="lightboxSpot"
+    @close="lightboxSpot = null"
+  />
 </template>

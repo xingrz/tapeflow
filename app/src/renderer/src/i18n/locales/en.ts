@@ -131,7 +131,9 @@ export default {
     copiesRequired: '0 copies — re-capture required',
     dirtyCopies: '{n} dirty copy | {n} dirty copies',
     close: 'Close',
-    loadingFrame: 'Loading frame…'
+    loadingFrame: 'Loading frame…',
+    holdToCompare: 'Hold to see the original',
+    showingOriginal: 'Original · release to restore marks'
   },
   kind: {
     dirty: 'dirty',
