@@ -103,10 +103,11 @@ export default {
   },
   tasks: {
     title: 'Preparing workspace',
-    hint: 'Copying and indexing the captures — this stays open until every file is ready.',
+    hint: 'Copying and indexing the captures.',
     dvLabel: 'dvrescue merge',
     remaining: '{eta} left',
     stage: {
+      pending: 'queued',
       copying: 'copying',
       indexing: 'indexing',
       merging: 'merging',

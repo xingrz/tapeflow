@@ -31,10 +31,12 @@ defineProps<{
             <div class="progress-track">
               <div
                 class="progress-fill"
-                :class="{ indeterminate: !task.determinate && task.stage !== 'done' }"
-                :style="task.determinate || task.stage === 'done'
-                  ? { width: `${Math.round(task.progress * 100)}%` }
-                  : undefined"
+                :class="{ indeterminate: !task.determinate && task.stage !== 'done' && task.stage !== 'pending' }"
+                :style="task.stage === 'pending'
+                  ? { width: '0%' }
+                  : task.determinate || task.stage === 'done'
+                    ? { width: `${Math.round(task.progress * 100)}%` }
+                    : undefined"
               />
             </div>
             <div class="task-meta">
@@ -120,6 +122,9 @@ defineProps<{
   display: flex;
   gap: 12px;
   font-size: 11px;
+  /* reserve the line even when empty (a queued row has no %/speed/ETA) so a row keeps the same
+     height through pending -> indexing and the modal doesn't grow/shrink on every transition */
+  min-height: 15px;
   color: var(--text-muted, #9aa6a0);
   font-variant-numeric: tabular-nums;
 }

@@ -103,10 +103,11 @@ export default {
   },
   tasks: {
     title: '正在准备工作区',
-    hint: '正在复制并索引采集文件——所有文件就绪前会一直保持打开。',
+    hint: '正在复制并索引采集文件。',
     dvLabel: 'dvrescue 合并',
     remaining: '剩 {eta}',
     stage: {
+      pending: '排队中',
       copying: '复制中',
       indexing: '索引中',
       merging: '合并中',
