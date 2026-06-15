@@ -147,25 +147,51 @@ def _hdv_capture_damage(s):
     return out
 
 
-def _capture_ranges(s):
-    """The TC segments this capture actually covers (split at its internal drops), so a lane shows
-    real gaps. Falls back to the whole tc span when the engine doesn't supply coverage."""
+def _capture_ranges(s, shift, a2f, fallback_axis):
+    """The TC segments this capture actually covers (split at its internal drops), each with its
+    physical-frame ``axis`` extent so the lane draws correctly in the axis (multi-session) layout —
+    the TC alone is ambiguous there because it restarts each session. The runs stay contiguous on the
+    frame axis across a TC reset (the GOPs are consecutive), so a reset shows no false gap. Falls back
+    to the whole capture span when the engine supplies no coverage."""
     cov = s.get("coverage") or []
+    if cov and a2f is not None:
+        return [{"tcStart": c["tc0"], "tcEnd": c["tc1"],
+                 "axis": [a2f(shift + c["j0"]), a2f(shift + c["j1"])]} for c in cov]
     if cov:
         return [{"tcStart": c["tc0"], "tcEnd": c["tc1"]} for c in cov]
-    return [{"tcStart": s.get("tc0"), "tcEnd": s.get("tc1")}]
+    return [{"tcStart": s.get("tc0"), "tcEnd": s.get("tc1"), "axis": list(fallback_axis)}]
 
 
-def _hdv_capture(s, files_by_tag):
+def _tc_key(tc):
+    """Order key for a tape TC ``"HH:MM:SS:FF"`` (or -1 if unparseable) — to find the furthest TC a
+    multi-session tape reaches, where the last GOP's TC is a restarted session near zero."""
+    try:
+        h, m, s, f = (int(x) for x in tc.replace(";", ":").split(":"))
+    except (ValueError, AttributeError):
+        return -1
+    return ((h * 60 + m) * 60 + s) * 100 + f
+
+
+def _hdv_capture(s, files_by_tag, frame_ext=None, a2f=None):
+    # Lay the lane out on the physical FRAME axis (consistent with segments/damage and the axis
+    # anchors) so a multi-session tape doesn't collapse; fall back to GOP units if a source somehow
+    # has no placed segment.
+    ext = (frame_ext or {}).get(s["tag"])
+    axis = [ext[0], ext[1]] if ext else [s["shift"], s["shift"] + s["ngops"]]
+    # span the TC across all of this capture's sessions: with a TC reset, the last GOP's tc0/tc1 is a
+    # restarted session near zero, so take the min/max over its coverage ranges (a no-op otherwise)
+    cov = s.get("coverage") or []
+    tc0 = min((c["tc0"] for c in cov), key=_tc_key) if cov else s.get("tc0")
+    tc1 = max((c["tc1"] for c in cov), key=_tc_key) if cov else s.get("tc1")
     return {
         "tag": s["tag"],
         "file": files_by_tag.get(s["tag"], s["tag"]),
-        "axis": [s["shift"], s["shift"] + s["ngops"]],   # GOP units on the tape axis
-        "tcSpan": [s.get("tc0"), s.get("tc1")],
+        "axis": axis,
+        "tcSpan": [tc0, tc1],
         "recSpan": [s.get("rec0"), s.get("rec1")],
         "health": [],   # legacy run-length field, unused; per-capture damage is `damage` below
         "damage": _hdv_capture_damage(s),
-        "ranges": _capture_ranges(s),
+        "ranges": _capture_ranges(s, s["shift"], a2f, axis),
     }
 
 
@@ -189,17 +215,55 @@ def from_hdvmerge(hdv, working_dir, files_by_tag):
     fps = hdv["fps"]
     segs = hdv["segments"]
     sources = hdv["sources"]
+    total = hdv["total_frames"]
     damage = _hdv_damage(hdv, fps)
+    multi = bool(hdv.get("multi_session"))
+    # The aligned GOP axis (where align placed each capture by content hash) -> output frames. The
+    # segments tile that axis in order, so they ARE the axis->frame map. A capture's lane must span
+    # its FULL aligned extent [shift, shift+ngops] mapped to frames — not just the segments the merge
+    # happened to pick it for — otherwise two overlapping transfers of one tape look appended end to
+    # end instead of overlapping.
+    shift_by_tag = {s["tag"]: s["shift"] for s in sources}
+    amap = []   # (axis0, axis1, frame0, frame1) per output segment, in axis order
+    for i, sg in enumerate(segs):
+        sh = shift_by_tag.get(sg["tag"], 0)
+        f1 = segs[i + 1]["frame0"] if i + 1 < len(segs) else total
+        amap.append((sh + sg["j0"], sh + sg["j1"], sg["frame0"], f1))
+
+    def _axis_to_frame(a):
+        for a0, a1, f0, f1 in amap:
+            if a0 <= a <= a1:
+                return f0 if a1 <= a0 else int(round(f0 + (a - a0) * (f1 - f0) / (a1 - a0)))
+        if not amap or a <= amap[0][0]:
+            return amap[0][2] if amap else 0
+        return amap[-1][3]
+
+    frame_ext = {s["tag"]: (_axis_to_frame(s["shift"]), _axis_to_frame(s["shift"] + s["ngops"]))
+                 for s in sources}
+    # the per-position (frame -> tc, rec) curve + recording-session seam positions (see hdvmerge)
+    anchors = [{"axis": a["axis"] if "axis" in a else a["frame"], "tc": a["tc"], "rec": a["rec"]}
+               for a in hdv.get("anchors", [])]
+    # On a multi-session tape the record-run TC restarts, so segs[-1].tc_end is a tiny restarted
+    # session near zero, NOT the tape's end — that collapsed the whole TC range. Show the furthest TC
+    # actually reached instead, and lay the map out on the physical axis via the anchors below.
+    tc_end = segs[-1].get("tc_end") if segs else None
+    if multi and anchors:
+        tc_end = max(anchors, key=lambda a: _tc_key(a["tc"]))["tc"]
     tape = {
         "tcStart": segs[0].get("tc") if segs else None,
-        "tcEnd": segs[-1].get("tc_end") if segs else None,
+        "tcEnd": tc_end,
         "recStart": segs[0].get("rec") if segs else None,
         "recEnd": segs[-1].get("rec_end") if segs else None,
-        "durationFrames": hdv["total_frames"],
+        "durationFrames": total,
         "title": _title([s["tag"] for s in sources]),
         # per-position (tape TC -> wall clock) curve so the map shows each position's true recording
         # time instead of extrapolating from recStart (which a stray/older head chunk would poison)
         "recAnchors": hdv.get("rec_curve") or [],
+        # a tape that splices on later footage restarts its TC: lay it out on the physical frame axis
+        # (axisAnchors label tc/rec per position; seams mark the session boundaries), exactly like DV
+        "multiSession": multi,
+        "axisAnchors": anchors,
+        "seams": list(hdv.get("seams") or []),
     }
     return {
         "schema": SCHEMA,
@@ -214,7 +278,7 @@ def from_hdvmerge(hdv, working_dir, files_by_tag):
             "missingFrames": sum(d["durationFrames"] for d in damage if d["kind"] == "missing"),
             "unusedCaptures": len(hdv["unused_sources"]),
         },
-        "captures": [_hdv_capture(s, files_by_tag) for s in sources],
+        "captures": [_hdv_capture(s, files_by_tag, frame_ext, _axis_to_frame) for s in sources],
         "segments": _hdv_segments(segs, hdv["total_frames"]),
         "damage": damage,
         "divergences": hdv["divergences"],

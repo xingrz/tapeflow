@@ -64,8 +64,41 @@ class TestNormalizeHdv(unittest.TestCase):
 
         self.assertEqual([c["tag"] for c in d["captures"]], ["capA", "capB"])
         self.assertEqual(d["captures"][0]["file"], "A.m2t")
-        self.assertEqual(d["captures"][0]["axis"], [0, 40])
+        # lane axis is the capture's FULL aligned extent ([shift, shift+ngops]) mapped to output
+        # frames — where it HAS content, not only where the merge used it — so two overlapping
+        # transfers of one tape overlap on the map instead of looking appended
+        self.assertEqual(d["captures"][0]["axis"], [0, 162])
+        self.assertEqual(d["captures"][1]["axis"], [41, 200])
+        self.assertLess(d["captures"][1]["axis"][0], d["captures"][0]["axis"][1])   # they overlap
         self.assertEqual([s["axis"] for s in d["segments"]], [[0, 120], [120, 200]])
+        # single, monotonic session: no seams, no physical-axis override
+        self.assertFalse(d["tape"]["multiSession"])
+        self.assertEqual(d["tape"]["axisAnchors"], [])
+        self.assertEqual(d["tape"]["seams"], [])
+
+    def test_multisession_lays_out_on_physical_axis(self):
+        # a tape that splices on later footage: hdvmerge reports the TC reset as a seam + a frame->tc/
+        # rec anchor curve + multi_session. The normalizer must pass those through, and replace the
+        # collapsed tcEnd (segs[-1].tc_end is a restarted session near zero) with the furthest TC.
+        hdv = _hdv()
+        hdv["multi_session"] = True
+        hdv["seams"] = [120]
+        hdv["anchors"] = [{"frame": 0, "tc": "07:00:00:00", "rec": "2007-01-01 09:00:00"},
+                          {"frame": 119, "tc": "07:00:49:24", "rec": "2007-01-01 09:00:49"},
+                          {"frame": 120, "tc": "00:00:00:00", "rec": "2007-01-01 11:00:00"}]
+        hdv["segments"][-1]["tc_end"] = "00:00:01:08"   # the restarted tail session
+        # capA's GOPs split into a main session + the restarted tail (a TC reset mid-capture)
+        hdv["sources"][0]["coverage"] = [{"tc0": "07:00:00:00", "tc1": "07:00:29:00", "j0": 0, "j1": 30},
+                                         {"tc0": "00:00:00:00", "tc1": "00:00:01:08", "j0": 30, "j1": 40}]
+        d = normalize.from_hdvmerge(hdv, "/work", {})
+        self.assertTrue(d["tape"]["multiSession"])
+        self.assertEqual(d["tape"]["seams"], [120])
+        self.assertEqual(d["tape"]["axisAnchors"][0], {"axis": 0, "tc": "07:00:00:00", "rec": "2007-01-01 09:00:00"})
+        self.assertEqual(d["tape"]["tcEnd"], "07:00:49:24")   # furthest TC, not the reset tail
+        # the two coverage runs map to CONTIGUOUS frame axes — the TC reset is no real content gap,
+        # so the lane draws covered across it instead of a missing stripe
+        ranges = d["captures"][0]["ranges"]
+        self.assertEqual([r["axis"] for r in ranges], [[0, 120], [120, 162]])
 
     def test_residual_becomes_a_dirty_recapture_spot(self):
         res = [{"frame": 20, "rec": "2007-01-01 09:00:05", "tc": "07:00:05:00",

@@ -731,6 +731,9 @@ function laneGaps(capture: Capture): Array<{ x: number; w: number }> {
   for (let i = 0; i < r.length - 1; i++) {
     const a = r[i].axis
     const b = r[i + 1].axis
+    // contiguous on the physical axis = no real drop (HDV's GOP-order axis stays contiguous across a
+    // TC reset, where the runs only split for tc labelling); a TC jump there is not missing footage
+    if (domain.value.mode === 'axis' && a && b && b[0] - a[1] < 1) continue
     const axisGap: [number, number] = a && b ? [a[1], b[0]] : capture.axis
     const range = rangeForTcOrAxis([r[i].tcEnd, r[i + 1].tcStart], axisGap)
     const c = range ? clippedXRange(range, 2) : null
