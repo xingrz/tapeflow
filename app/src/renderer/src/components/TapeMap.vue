@@ -62,6 +62,8 @@ let ro: ResizeObserver | null = null
 let dragging = false
 let dragEl: HTMLElement | null = null
 let dragStartX = 0
+let dragStartY = 0
+let dragStartScroll = 0
 let dragStartMin = 0
 let dragStartMax = 1
 let moved = false
@@ -109,11 +111,11 @@ onUnmounted(() => {
 function resetView(): void {
   focusedCaptureTag.value = null
   const d = domain.value
-  // pad MUST equal clampView's pad so "fit" lands exactly on the full pannable extent — i.e. fully
-  // zoomed out with zero horizontal scroll room (#8).
-  const pad = Math.max((d.max - d.min) * 0.03, 0.001)
-  viewMin.value = d.min - pad
-  viewMax.value = d.max + pad
+  // fit = the content's exact extent. The plot already insets by the lane-label gutter + a right
+  // margin (see plotRect), so no extra domain padding is needed — that padding was an empty lead-in/
+  // out that, being a fraction of the WHOLE tape, ballooned to a long strip once zoomed in (#8).
+  viewMin.value = d.min
+  viewMax.value = d.max
   clampView()
 }
 
@@ -186,7 +188,7 @@ function zoomAtPointer(pointerX: number, nextSpan: number): void {
   const fraction = (pointerX - plot.x) / plot.w
   const pointer = viewMin.value + fraction * (viewMax.value - viewMin.value)
   const full = domain.value.max - domain.value.min
-  const span = clamp(nextSpan, Math.max(full / 250, 0.01), full * 1.06)
+  const span = clamp(nextSpan, Math.max(full / 250, 0.01), full)
   viewMin.value = pointer - fraction * span
   viewMax.value = viewMin.value + span
   clampView()
@@ -197,6 +199,8 @@ function onPointerDown(e: PointerEvent): void {
   dragging = true
   moved = false
   dragStartX = e.clientX
+  dragStartY = e.clientY
+  dragStartScroll = wrap.value?.scrollTop ?? 0
   dragStartMin = viewMin.value
   dragStartMax = viewMax.value
   dragEl = e.currentTarget as HTMLElement
@@ -206,13 +210,17 @@ function onPointerDown(e: PointerEvent): void {
 function onPointerMove(e: PointerEvent): void {
   if (!dragging || !width.value) return
   const dx = e.clientX - dragStartX
-  if (Math.abs(dx) > 2) moved = true
+  const dy = e.clientY - dragStartY
+  if (Math.abs(dx) > 2 || Math.abs(dy) > 2) moved = true
+  // horizontal drag pans the time axis...
   const plot = plotRect()
   const span = dragStartMax - dragStartMin
   const delta = (dx / plot.w) * span
   viewMin.value = dragStartMin - delta
   viewMax.value = dragStartMax - delta
   clampView()
+  // ...and vertical drag scrolls the lanes (the grab cursor implies both); the browser clamps scrollTop
+  if (wrap.value) wrap.value.scrollTop = dragStartScroll - dy
   draw()
 }
 
@@ -238,7 +246,7 @@ function onHeaderClick(e: MouseEvent): void {
 
 function setViewAround(center: number, span: number): void {
   const full = domain.value.max - domain.value.min
-  const next = clamp(span, Math.max(full / 250, 0.01), full * 1.06)
+  const next = clamp(span, Math.max(full / 250, 0.01), full)
   viewMin.value = center - next / 2
   viewMax.value = center + next / 2
   clampView()
@@ -256,25 +264,25 @@ function panByPixels(px: number): void {
 function clampView(): void {
   const d = domain.value
   const full = d.max - d.min
-  const pad = Math.max(full * 0.03, 0.001)
-  const minAllowed = d.min - pad
-  const maxAllowed = d.max + pad
   let min = viewMin.value
   let max = viewMax.value
   const span = max - min
 
-  if (span >= maxAllowed - minAllowed) {
-    viewMin.value = minAllowed
-    viewMax.value = maxAllowed
+  // zoomed out to (or past) the whole tape: centre the content, with no horizontal pan room (#8)
+  if (span >= full) {
+    const center = (d.min + d.max) / 2
+    viewMin.value = center - span / 2
+    viewMax.value = center + span / 2
     return
   }
-  if (min < minAllowed) {
-    max += minAllowed - min
-    min = minAllowed
+  // zoomed in: keep the window inside the content so there's no empty over-scroll past either end
+  if (min < d.min) {
+    max += d.min - min
+    min = d.min
   }
-  if (max > maxAllowed) {
-    min -= max - maxAllowed
-    max = maxAllowed
+  if (max > d.max) {
+    min -= max - d.max
+    max = d.max
   }
   viewMin.value = min
   viewMax.value = max
