@@ -84,9 +84,6 @@ export default {
     file: 'File',
     tapeTc: 'Tape TC',
     recordingTime: 'Recording time',
-    format: 'Format',
-    size: 'Size',
-    index: 'Index',
     quality: {
       persistent: 'damaged ~{pct}/frame',
       intermittent: '{pct} of frames damaged',

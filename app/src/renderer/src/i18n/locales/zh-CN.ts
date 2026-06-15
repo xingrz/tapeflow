@@ -84,9 +84,6 @@ export default {
     file: '文件',
     tapeTc: '磁带时间码',
     recordingTime: '录制时间',
-    format: '格式',
-    size: '大小',
-    index: '索引',
     quality: {
       persistent: '每帧约 {pct} 损坏',
       intermittent: '{pct} 的帧有损坏',

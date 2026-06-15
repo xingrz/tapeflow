@@ -4,7 +4,6 @@ import { ChevronsDown, Film, Link2, Unlink } from '@lucide/vue'
 import { useI18n } from 'vue-i18n'
 import type { Capture, ErrorProfile, TapeAnalysis } from '../types'
 import type { WorkspaceCaptureView } from '../stores/workflow'
-import { formatBytes } from '../utils/format'
 import { formatRecordingTime } from '../utils/timecode'
 
 const props = defineProps<{
@@ -132,32 +131,6 @@ function compareMtime(a: number | undefined, b: number | undefined): number {
             </td>
             <td class="mono">{{ capture.tcSpan[0] ?? '-' }} - {{ capture.tcSpan[1] ?? '-' }}</td>
             <td class="mono">{{ formatRecordingTime(capture.recSpan[0]) }} - {{ formatRecordingTime(capture.recSpan[1]) }}</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-
-    <div v-else class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>{{ $t('captures.file') }}</th>
-            <th>{{ $t('captures.format') }}</th>
-            <th>{{ $t('captures.size') }}</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="capture in captures" :key="capture.file">
-            <td>
-              <div class="file-cell">
-                <Film :size="16" />
-                <div>
-                  <strong :title="capture.file">{{ capture.file }}</strong>
-                </div>
-              </div>
-            </td>
-            <td>{{ capture.format.toUpperCase() }}</td>
-            <td>{{ formatBytes(capture.sizeBytes) }}</td>
           </tr>
         </tbody>
       </table>
