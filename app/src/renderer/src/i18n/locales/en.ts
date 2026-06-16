@@ -106,7 +106,6 @@ export default {
     dvLabel: 'dvrescue merge',
     remaining: '{eta} left',
     stage: {
-      pending: 'queued',
       copying: 'copying',
       indexing: 'indexing',
       merging: 'merging',

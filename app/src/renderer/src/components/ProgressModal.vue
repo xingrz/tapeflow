@@ -31,12 +31,10 @@ defineProps<{
             <div class="progress-track">
               <div
                 class="progress-fill"
-                :class="{ indeterminate: !task.determinate && task.stage !== 'done' && task.stage !== 'pending' }"
-                :style="task.stage === 'pending'
-                  ? { width: '0%' }
-                  : task.determinate || task.stage === 'done'
-                    ? { width: `${Math.round(task.progress * 100)}%` }
-                    : undefined"
+                :class="{ indeterminate: !task.determinate && task.stage !== 'done' }"
+                :style="task.determinate || task.stage === 'done'
+                  ? { width: `${Math.round(task.progress * 100)}%` }
+                  : undefined"
               />
             </div>
             <div class="task-meta">

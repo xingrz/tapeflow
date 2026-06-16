@@ -106,7 +106,6 @@ export default {
     dvLabel: 'dvrescue 合并',
     remaining: '剩 {eta}',
     stage: {
-      pending: '排队中',
       copying: '复制中',
       indexing: '索引中',
       merging: '合并中',
