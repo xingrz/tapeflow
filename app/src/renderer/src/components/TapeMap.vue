@@ -634,9 +634,33 @@ function drawResultTrack(ctx: CanvasRenderingContext2D): void {
 // result bar is continuous, with only genuine missing gaps left dark. Works in both TC and axis
 // domains (axis segments already tile; TC ones leave the ~1-GOP sliver this closes).
 function resultCoverageRuns(): Array<{ x: number; w: number }> {
-  const fps = props.analysis.fps || 25
-  // ~1 s in the active domain's units — enough to bridge a one-GOP seam, far short of a real gap
-  const bridge = domain.value.mode === 'tc' ? 30 / fps : 1
+  const plot = plotRect()
+  if (domain.value.mode === 'tc') {
+    // The merged output covers the whole assembled tape EXCEPT the genuine missing spots (the
+    // engine's gaps/lost). Build the result bar by subtracting those from the full extent — NOT by
+    // coalescing per-segment or per-capture TC runs, whose TC is non-monotonic across a session reset
+    // or a TC glitch and would leave false breaks where the tape is actually covered. (Missing with
+    // no TC, e.g. a never-captured region, can't be placed on the TC axis and is left to the markers.)
+    let runs: Array<[number, number]> = [[plot.x, plot.x + plot.w]]
+    for (const view of props.analysis.damage) {
+      if (view.kind !== 'missing') continue
+      const range = rangeForTcOrAxis([view.tcStart, view.tcEnd], view.axis)
+      const c = range ? clippedXRange(range) : null
+      if (!c) continue
+      const cut: Array<[number, number]> = []
+      for (const [a, b] of runs) {
+        if (c.x >= b || c.x + c.w <= a) cut.push([a, b])
+        else {
+          if (a < c.x) cut.push([a, c.x])
+          if (c.x + c.w < b) cut.push([c.x + c.w, b])
+        }
+      }
+      runs = cut
+    }
+    return runs.filter(([a, b]) => b - a >= 1).map(([a, b]) => ({ x: a, w: b - a }))
+  }
+  // axis mode (DV): the output segments tile the physical axis, so coalesce touching ones (a ~1-GOP
+  // sliver between adjacent segments would otherwise read as a gap); genuine holes stay dark.
   const intervals: Array<[number, number]> = []
   for (const segment of props.analysis.segments) {
     const range = rangeForTcOrAxis(segment.tcSpan, segment.axis)
@@ -646,7 +670,7 @@ function resultCoverageRuns(): Array<{ x: number; w: number }> {
   const merged: Array<[number, number]> = []
   for (const [a, b] of intervals) {
     const last = merged[merged.length - 1]
-    if (last && a <= last[1] + bridge) last[1] = Math.max(last[1], b)
+    if (last && a <= last[1] + 1) last[1] = Math.max(last[1], b)
     else merged.push([a, b])
   }
   const runs: Array<{ x: number; w: number }> = []
