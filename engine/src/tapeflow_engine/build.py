@@ -66,6 +66,9 @@ def _build_hdv(directory, files, output, notify):
             "decodeErrors": info.get("decode_errors"),
             "unexplainedDecode": info.get("unexplained_decode"),
             "decodeGate": info.get("decode_gate"),
+            # demuxer timestamp discontinuities at byte-exact splices — not content damage, surfaced
+            # so the UI can reassure rather than warn (affects only some players' seeking)
+            "seamDiscontinuities": info.get("seam_discontinuities"),
         },
     }
 

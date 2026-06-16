@@ -67,7 +67,16 @@ export function verifySummary(verify: BuildVerify | null): string {
   const checks = [
     verify.aux ? t('verify.auxPresent') : t('verify.auxMissing'),
     verify.ccOk ? t('verify.ccClean') : t('verify.ccWarning'),
-    verify.decodeErrors == null ? null : t('verify.decodeErrors', { count: verify.decodeErrors })
+    // decode check (only when ffmpeg ran): a positive "decode clean" when spotless, the count when not
+    verify.decodeErrors == null
+      ? null
+      : verify.decodeErrors > 0
+        ? t('verify.decodeErrors', { count: verify.decodeErrors })
+        : t('verify.decodeClean'),
+    // benign seam timestamp discontinuities — informational, not a warning
+    verify.seamDiscontinuities
+      ? t('verify.seamDiscontinuities', { count: verify.seamDiscontinuities })
+      : null
   ].filter(Boolean)
   return checks.join(' | ')
 }

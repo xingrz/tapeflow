@@ -67,7 +67,9 @@ export default {
     auxMissing: 'AUX missing',
     ccClean: 'CC/TEI clean',
     ccWarning: 'CC/TEI warning',
-    decodeErrors: '{count} decode errors'
+    decodeClean: 'decode clean',
+    decodeErrors: '{count} decode errors',
+    seamDiscontinuities: '{count} seam timestamp breaks (content intact; some players may mis-seek)'
   },
   captures: {
     title: 'Captures',

@@ -67,7 +67,9 @@ export default {
     auxMissing: 'AUX 缺失',
     ccClean: 'CC/TEI 正常',
     ccWarning: 'CC/TEI 警告',
-    decodeErrors: '{count} 个解码错误'
+    decodeClean: '解码正常',
+    decodeErrors: '{count} 个解码错误',
+    seamDiscontinuities: '{count} 处接缝时间戳不连续（内容完好，仅个别播放器定位可能受影响）'
   },
   captures: {
     title: '采集',

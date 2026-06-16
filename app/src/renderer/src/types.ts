@@ -146,6 +146,9 @@ export interface BuildVerify {
   decodeErrors: number | null
   unexplainedDecode: number | null
   decodeGate: boolean | null
+  // demuxer timestamp discontinuities at byte-exact capture splices — not content damage; affects
+  // only some players' seeking. Surfaced so a sound merge is explained rather than warned about.
+  seamDiscontinuities: number | null
 }
 
 export interface BuildResult {
