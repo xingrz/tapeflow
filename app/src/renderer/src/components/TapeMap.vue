@@ -758,6 +758,16 @@ function laneGaps(capture: Capture): Array<{ x: number; w: number }> {
     // contiguous on the physical axis = no real drop (HDV's GOP-order axis stays contiguous across a
     // TC reset, where the runs only split for tc labelling); a TC jump there is not missing footage
     if (domain.value.mode === 'axis' && a && b && b[0] - a[1] < 1) continue
+    // The runs are in capture (file) order, which a TC reset makes non-monotonic in TC: a capture can
+    // hold a pre-reset blip at a high TC before the tape restarts near 0. The "gap" from that blip
+    // back to the restarted content is a BACKWARD TC jump, not a forward drop — skip it. Otherwise
+    // rangeForTcOrAxis, seeing a reversed span, falls back to the full capture axis and paints the
+    // whole lane missing (the spine capture then reads as entirely red even though it holds the tape).
+    if (domain.value.mode === 'tc') {
+      const ea = tcToSeconds(r[i].tcEnd, props.analysis.fps)
+      const sb = tcToSeconds(r[i + 1].tcStart, props.analysis.fps)
+      if (ea == null || sb == null || sb <= ea) continue
+    }
     const axisGap: [number, number] = a && b ? [a[1], b[0]] : capture.axis
     const range = rangeForTcOrAxis([r[i].tcEnd, r[i + 1].tcStart], axisGap)
     const c = range ? clippedXRange(range, 2) : null
