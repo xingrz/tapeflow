@@ -8,6 +8,12 @@ requires-python = ">=3.11"
 # frozen in for release. As a zero-setup fallback the sidecar also adds the submodule `src/` dirs to
 # sys.path when the engines aren't already importable (see tapeflow_engine/_bootstrap.py).
 
+[project.scripts]
+# A thin one-shot CLI over the same sidecar methods the desktop app drives over JSON-RPC, for
+# scripting and automated agents (see tapeflow_engine/cli.py). Also runnable without an install as
+# `python -m tapeflow_engine.cli`.
+tapeflow = "tapeflow_engine.cli:main"
+
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"

@@ -13,11 +13,15 @@ directories:
 files:
   - out/**/*
   - package.json
-# the frozen Python sidecar (PyInstaller onedir, with hdvmerge/dvmerge baked in). Built separately
-# in CI to engine/dist/ and copied into the app's resources/. ffmpeg + dvrescue stay external.
+# the frozen Python sidecar + the standalone CLI (PyInstaller onedir bundles, with hdvmerge/dvmerge
+# baked in). Built separately in CI to engine/dist/ and copied into the app's resources/. The CLI is
+# bundled so an installed app doubles as the `tapeflow` command for scripts/agents. ffmpeg + dvrescue
+# stay external.
 extraResources:
   - from: ../engine/dist/tapeflow-engine
     to: tapeflow-engine
+  - from: ../engine/dist/tapeflow-cli
+    to: tapeflow-cli
   - from: build/icon.png
     to: icon.png
 artifactName: ${productName}-${version}-${arch}.${ext}

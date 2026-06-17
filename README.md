@@ -69,6 +69,24 @@ your PATH:
 - **[ffmpeg](https://ffmpeg.org/)** — recommended; it powers HDV damage detection and the
   damaged-frame previews.
 
+## Agent skill
+
+Prefer to let an AI coding assistant do the bookkeeping for you? TapeFlow ships a thin one-shot CLI
+(`tapeflow analyze <dir>` / `tapeflow build <dir> <out>`) over the same engines the app uses, plus an
+installable [skill](skills/tapeflow/SKILL.md). Install it into your agent (Claude Code, etc.):
+
+```sh
+npx skills add xingrz/tapeflow
+```
+
+The installed TapeFlow app bundles this CLI, so once you've installed TapeFlow (above) the skill
+locates it automatically — no separate CLI install needed.
+
+It teaches the agent to check whether a folder of captures adds up to a complete tape, report exactly
+which spots still need re-capturing, and export the merged file. Where the companion
+[tapecap](https://github.com/xingrz/tapecap) skill is also installed (raw DV/HDV capture over
+FireWire on macOS ≤ 15), it can even drive the deck and re-capture those spots for you.
+
 ## Built on
 
 TapeFlow doesn't reinvent the merge — it's a graphical front-end to two existing, open-source

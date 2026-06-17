@@ -278,6 +278,12 @@ It is a polyglot monorepo, but needs no monorepo tool — `app/` has its own `pa
 - **Run the sidecar tests**: `cd engine && python -m unittest discover`.
 - **Drive the sidecar directly** (no UI): pipe NDJSON requests to `PYTHONPATH=engine/src python -m
   tapeflow_engine`, e.g. `{"jsonrpc":"2.0","id":1,"method":"analyze","params":{"dir":"…"}}`.
+- **Or use the thin CLI** (`tapeflow_engine.cli`): a one-shot front-end over the *same* `METHODS`
+  for scripting/agents — `PYTHONPATH=engine/src python -m tapeflow_engine.cli analyze <dir>` (also
+  `capabilities`, `build <dir> <out>`; `--compact` for one-line JSON). It adds no logic: `analyze`
+  is the same normalisation the renderer gets, `build` is byte-for-byte the engines. stdout = the
+  JSON result, stderr = progress. An installable skill wrapping it lives in `skills/tapeflow/`
+  (`npx skills add xingrz/tapeflow`).
 
 ## When making changes (conventions / invariants)
 

@@ -52,6 +52,13 @@ jobs:
           [ "${{ runner.os }}" = "Windows" ] && BIN="engine/dist/tapeflow-engine/tapeflow-engine.exe"
           printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"capabilities","params":{}}' | "$BIN" | head -c 400
           echo
+      - name: Smoke-test the CLI
+        shell: bash
+        run: |
+          BIN="engine/dist/tapeflow-cli/tapeflow-cli"
+          [ "${{ runner.os }}" = "Windows" ] && BIN="engine/dist/tapeflow-cli/tapeflow-cli.exe"
+          "$BIN" --compact capabilities | head -c 400
+          echo
 
       # 2) Build the Electron app and package it (the sidecar is copied in via extraResources).
       - name: Setup Node
