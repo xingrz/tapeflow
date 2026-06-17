@@ -36,9 +36,15 @@ it from there.)
    the map turn from red to green.
 4. **Export** the finished, merged video.
 
-## Download
+## Install
 
-Grab the latest build for your platform from the
+On **macOS** the easiest way is [Homebrew](https://brew.sh):
+
+```sh
+brew install --cask xingrz/tap/tapeflow
+```
+
+Otherwise grab the latest build for your platform from the
 [**Releases**](https://github.com/xingrz/tapeflow/releases) page:
 
 - **macOS** — `.dmg` (pick `arm64` for Apple Silicon, `x64` for Intel Macs)
