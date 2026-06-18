@@ -25,6 +25,24 @@ dvrescue's merge), and `analyze` is a faithful, normalised view of those engines
 result is identical to running the engines directly — you just get one unified schema and one verdict
 instead of two engine-specific reports.
 
+## Hand over everything — don't judge, don't curate
+
+The whole method rests on one idea: you give tapeflow **every** capture of the tape — each pass,
+re-capture and 补采 fragment, however broken — in one directory, and the engines pick the clean frames
+per tape position across all of them (matched by *content*, not by filename or date). Two ways an
+agent goes wrong here, both to avoid:
+
+- **Don't pre-judge which material is good.** Never rank, skip, or discard a capture because it "looks
+  corrupt", and don't try to single out the good frames or files yourself — a mostly-broken pass often
+  holds the one clean copy of a frame no other pass caught. Deciding good-vs-bad per position *is* the
+  engines' job, and it comes back to you as `analyze`'s verdict.
+- **Don't feed a hand-picked subset.** Don't stage a curated selection with symlinks, copies, or a
+  temp dir. Drop all captures into the real working dir and point `analyze`/`build` at that dir — they
+  read every matching file in it and stay fast via the `.tapeflow/` cache. A partial set throws away
+  the redundancy the merge depends on.
+
+Your job is to run `analyze` and act on what it reports — not to curate its inputs.
+
 ## When to use
 
 - You have a directory of **repeated captures of one tape** — several `.dv` files, or several
@@ -88,9 +106,14 @@ clean `error: …` line on stderr — not a traceback.
 3. **Re-capture and re-analyse.** New captures get dropped into the same dir; re-run `analyze`. Only
    the new file is indexed. The damage list shrinks each round. To drive the deck and fill the gaps
    automatically, see **Automatic re-capture with tapecap** below.
-4. **Build.** When `buildable` is `true`, `tapeflow build <dir> <output.m2t|.dv>` writes the merged
-   file. For HDV the result carries a `verify` summary (AUX/timecode survived, CC/TEI integrity,
-   decode check); DV has `verify: null` (the merge and its metadata are dvrescue's).
+4. **Build — write it outside the captures dir.** When `buildable` is `true`,
+   `tapeflow build <dir> <output>` writes the merged file. Put `<output>` in a **subdirectory** (e.g.
+   `<dir>/out/merged.m2t`) or a sibling/parent — **never inside `<dir>` itself**: the merge is a
+   `.m2t`/`.dv` file, so leaving it among the captures makes the next `analyze` ingest your own output
+   as another "capture" and corrupt the result. (`analyze` lists only the top level and skips
+   subdirectories, so a subdir is safe.) For HDV the result carries a `verify` summary (AUX/timecode
+   survived, CC/TEI integrity, decode check); DV has `verify: null` (the merge and its metadata are
+   dvrescue's).
 
 You can export a knowingly-incomplete tape as long as `buildable` is `true` (HDV refuses only on
 non-tape-adjacent seams); `complete` just tells you whether any damage remains.
@@ -161,9 +184,15 @@ overwrite — it only gives the merge more material to pick the clean frames fro
 
 ## Guardrails
 
+- **Give it everything; don't curate.** Hand over all captures and let `analyze` judge — never
+  pre-screen files by eye or feed a hand-picked subset (see *Hand over everything* above). This is the
+  rule agents break most.
 - **One tape = one format.** A dir mixing `.m2t` and `.dv` is a user error the CLI rejects — surface
   it, don't try to merge across formats.
+- **Keep the build output out of the captures dir.** The merge is a `.m2t`/`.dv` file; left in `<dir>`
+  it becomes a phantom capture on the next `analyze`. Write it to a subdir or a sibling/parent
+  (Workflow step 4).
 - **Sources are read-only.** tapeflow never modifies the captures; writes go only to the merged
-  output and the engine caches under `<dir>/.tapeflow/`.
+  output (outside `<dir>`) and the engine caches under `<dir>/.tapeflow/`.
 - **Don't reach past the CLI.** The `tapeflow.analysis/1` JSON is the contract; don't scrape the
   engines' own reports or internals.
