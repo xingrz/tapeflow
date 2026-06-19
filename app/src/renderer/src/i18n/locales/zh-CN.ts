@@ -77,9 +77,7 @@ export default {
     unplaced: '{count} 个未排入',
     linkedTip: '引擎排入的每个采集都已呈现在上方的磁带图中。',
     unplacedTip: '{count} 个采集无法排入磁带，未包含在合并输出中。',
-    lanesSegments: '{lanes} 条泳道 · {segments} 个输出片段',
-    lanesDvMerge: '{lanes} 条泳道 · DV 逐帧合并',
-    dvMerge: 'DV 逐帧合并',
+    fragments: '{count} 个碎片',
     filesInWorkspace: '工作区中有 {count} 个文件',
     collapse: '折叠采集面板',
     show: '采集',
@@ -87,11 +85,13 @@ export default {
     tapeTc: '磁带时间码',
     recordingTime: '录制时间',
     quality: {
-      persistent: '每帧约 {pct} 损坏',
-      intermittent: '{pct} 的帧有损坏',
+      clean: '完好',
+      cleanTip: '{seen} 帧全部完好',
+      damagedTip: '{seen} 帧中有 {concealed} 帧损坏',
+      method: '隐藏方式 {method}',
+      audioTip: '{audio} 帧音频损坏',
       headEven: '偏偶场',
-      headOdd: '偏奇场',
-      tip: '隐藏方式 {method} · {concealed}/{seen} 帧含损坏 · 偶场占 {even}'
+      headOdd: '偏奇场'
     }
   },
   status: {

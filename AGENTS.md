@@ -160,7 +160,10 @@ frame-accurate axis unification across formats is a known refinement; until then
   `damage[] kind:"missing"`; `divergences[]` → `divergences[]`; `unused_sources[]` →
   `summary.unusedCaptures`.
 - dvmerge `complete`/`fps` pass through; `spans[]` → `damage[]` (`kind` from span kind: mosaic→
-  `dirty`, missing→`missing`; `cover` → `coverage`); `sources[]` → `captures[]`.
+  `dirty`, missing→`missing`; `cover` → `coverage`); `sources[]` → `captures[]`, including each
+  source's `errorProfile` (DV only — dvrescue's per-capture concealment detail mined from its `-x`
+  XML: true `concealedFrac`, `avgConcealedPct`, `evenSharePct` azimuth split, dominant `staMethod` +
+  full `staHistogram`, and the audio side `audioConcealedFrac`), passed through verbatim.
 
 ## The UI it drives (design intent — now built)
 

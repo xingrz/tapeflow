@@ -18,28 +18,28 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 
-// A compact per-capture quality chip from the DV error-concealment profile: how heavily concealed
-// (persistent vs intermittent), and an azimuth-head bias note when the damage favours one field.
-function quality(profile?: ErrorProfile): { text: string; level: 'warn' | 'note'; title: string } | null {
-  if (!profile || profile.concealedFrac <= 0) return null
-  const pct = (v: number): string => `${Math.round(v * 100)}%`
-  const persistent = profile.concealedFrac >= 0.7
-  const text = persistent
-    ? t('captures.quality.persistent', { pct: pct(profile.avgConcealedPct) })
-    : t('captures.quality.intermittent', { pct: pct(profile.concealedFrac) })
-  const bias =
-    profile.evenSharePct >= 0.65
-      ? t('captures.quality.headEven')
-      : profile.evenSharePct <= 0.35
-        ? t('captures.quality.headOdd')
-        : ''
-  const title = t('captures.quality.tip', {
-    method: profile.staMethod,
-    concealed: profile.framesConcealed,
-    seen: profile.framesSeen,
-    even: pct(profile.evenSharePct)
-  })
-  return { text: bias ? `${text} · ${bias}` : text, level: persistent ? 'warn' : 'note', title }
+// A compact per-capture badge sitting after the filename: just the damage rate (or "clean"); the
+// full description — in frame counts, not percentages — is the hover tooltip. DV only (HDV captures
+// carry no concealment profile).
+function quality(profile?: ErrorProfile): { text: string; level: 'clean' | 'light' | 'heavy'; title: string } | null {
+  if (!profile) return null
+  const seen = profile.framesSeen
+  if (profile.concealedFrac <= 0) {
+    return { text: t('captures.quality.clean'), level: 'clean',
+             title: t('captures.quality.cleanTip', { seen }) }
+  }
+  // a non-zero rate that rounds to 0% shows "<1%", so a 1-frame dropout doesn't read as "0%"
+  const r = Math.round(profile.concealedFrac * 100)
+  const parts = [
+    t('captures.quality.damagedTip', { concealed: profile.framesConcealed, seen }),
+    t('captures.quality.method', { method: profile.staMethod })
+  ]
+  if (profile.audioFramesConcealed > 0) {
+    parts.push(t('captures.quality.audioTip', { audio: profile.audioFramesConcealed }))
+  }
+  if (profile.evenSharePct >= 0.65) parts.push(t('captures.quality.headEven'))
+  else if (profile.evenSharePct <= 0.35) parts.push(t('captures.quality.headOdd'))
+  return { text: r === 0 ? '<1%' : `${r}%`, level: r >= 50 ? 'heavy' : 'light', title: parts.join(' · ') }
 }
 
 const sortedAnalysisCaptures = computed<Capture[]>(() => {
@@ -51,6 +51,11 @@ const sortedAnalysisCaptures = computed<Capture[]>(() => {
       || (originalOrder.get(a.tag) ?? 0) - (originalOrder.get(b.tag) ?? 0)
   )
 })
+
+// each row with its badge computed once (vs calling quality() repeatedly in the template)
+const rows = computed(() =>
+  sortedAnalysisCaptures.value.map((capture) => ({ capture, quality: quality(capture.errorProfile) }))
+)
 
 function captureTitle(file: string, tag?: string): string {
   if (!tag || tag === file || tag === stem(file)) return file
@@ -89,9 +94,7 @@ function compareMtime(a: number | undefined, b: number | undefined): number {
             {{ analysis.summary.unusedCaptures ? $t('captures.unplaced', { count: analysis.summary.unusedCaptures }) : $t('captures.allLinked') }}
           </span>
         </div>
-        <p v-if="analysis">{{ analysis.segments.length
-          ? $t('captures.lanesSegments', { lanes: analysis.captures.length, segments: analysis.segments.length })
-          : $t('captures.lanesDvMerge', { lanes: analysis.captures.length }) }}</p>
+        <p v-if="analysis">{{ $t('captures.fragments', { count: analysis.captures.length }) }}</p>
         <p v-else>{{ $t('captures.filesInWorkspace', { count: captures.length }) }}</p>
       </div>
       <button class="panel-action" type="button" :title="$t('captures.collapse')" @click="emit('collapse')">
@@ -110,27 +113,27 @@ function compareMtime(a: number | undefined, b: number | undefined): number {
         </thead>
         <tbody>
           <tr
-            v-for="capture in sortedAnalysisCaptures"
-            :key="capture.tag"
+            v-for="row in rows"
+            :key="row.capture.tag"
             class="selectable-row"
-            @click="emit('selectCapture', capture.tag)"
+            @click="emit('selectCapture', row.capture.tag)"
           >
             <td>
               <div class="file-cell">
                 <Film :size="16" />
-                <div>
-                  <strong :title="captureTitle(capture.file, capture.tag)">{{ capture.file }}</strong>
+                <div class="file-meta">
+                  <strong :title="captureTitle(row.capture.file, row.capture.tag)">{{ row.capture.file }}</strong>
                   <span
-                    v-if="quality(capture.errorProfile)"
+                    v-if="row.quality"
                     class="cap-quality"
-                    :class="quality(capture.errorProfile)!.level"
-                    :title="quality(capture.errorProfile)!.title"
-                  >{{ quality(capture.errorProfile)!.text }}</span>
+                    :class="row.quality.level"
+                    :title="row.quality.title"
+                  >{{ row.quality.text }}</span>
                 </div>
               </div>
             </td>
-            <td class="mono">{{ capture.tcSpan[0] ?? '-' }} - {{ capture.tcSpan[1] ?? '-' }}</td>
-            <td class="mono">{{ formatRecordingTime(capture.recSpan[0]) }} - {{ formatRecordingTime(capture.recSpan[1]) }}</td>
+            <td class="mono">{{ row.capture.tcSpan[0] ?? '-' }} - {{ row.capture.tcSpan[1] ?? '-' }}</td>
+            <td class="mono">{{ formatRecordingTime(row.capture.recSpan[0]) }} - {{ formatRecordingTime(row.capture.recSpan[1]) }}</td>
           </tr>
         </tbody>
       </table>
@@ -140,22 +143,45 @@ function compareMtime(a: number | undefined, b: number | undefined): number {
 </template>
 
 <style scoped>
-.cap-quality {
-  display: inline-block;
-  margin-top: 2px;
-  padding: 1px 6px;
-  border-radius: 999px;
-  font-size: 11px;
-  line-height: 1.5;
+/* filename + its quality badge on one line; the name ellipsizes, the badge stays put */
+.file-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.file-meta strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* a small pill matching the app's badge family (link-badge / archive-badge): green = clean,
+   amber = some damage, red = heavily concealed — so the column scans at a glance */
+.cap-quality {
+  flex: none;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 0 7px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.7;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
   cursor: help;
 }
-.cap-quality.warn {
-  color: var(--warn, #e0a23a);
-  background: color-mix(in srgb, var(--warn, #e0a23a) 16%, transparent);
+.cap-quality.clean {
+  border-color: var(--accent-border);
+  background: var(--accent-bg);
+  color: var(--accent);
 }
-.cap-quality.note {
-  color: var(--text-muted, #9aa6a0);
-  background: color-mix(in srgb, var(--text-muted, #9aa6a0) 14%, transparent);
+.cap-quality.light {
+  border-color: var(--warn-border);
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+.cap-quality.heavy {
+  border-color: var(--danger-border);
+  background: var(--danger-bg);
+  color: var(--danger);
 }
 </style>

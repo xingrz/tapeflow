@@ -26,16 +26,20 @@ export interface HealthRun {
   state: string
 }
 
-// Per-capture DV error-concealment profile (from dvrescue's -x XML; absent for HDV). How heavily and
-// by which STA method this transfer is concealed, and the even/odd DIF-sequence (azimuth-head) split.
+// Per-capture DV error-concealment profile (mined from dvrescue's -x XML; absent for HDV). How
+// heavily and by which STA method this transfer is concealed, the even/odd DIF-sequence (azimuth-
+// head) split, the full method distribution, and the audio side.
 export interface ErrorProfile {
-  framesSeen: number
-  framesConcealed: number
-  concealedFrac: number // 0..1 of frames carrying any concealed block
+  framesSeen: number // total frames in the capture
+  framesConcealed: number // frames carrying any concealed video block
+  concealedFrac: number // 0..1 TRUE rate over all frames (framesConcealed / framesSeen)
   avgConcealedPct: number // 0..1, mean concealed blocks/frame over concealed frames
   evenSharePct: number // 0..1, share of concealed blocks on even DIF sequences (azimuth split)
-  staCode: number
+  staCode: number // dominant concealment method code
   staMethod: string
+  staHistogram: { code: number; method: string; frac: number }[] // full method distribution
+  audioFramesConcealed: number // frames carrying a concealed (0x8000) audio block
+  audioConcealedFrac: number // 0..1 over all frames
 }
 
 export interface Capture {

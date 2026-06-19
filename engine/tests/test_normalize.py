@@ -289,15 +289,22 @@ class TestNormalizeDv(unittest.TestCase):
         self.assertEqual(cap["damage"][0]["axis"], [250, 275])   # physical span, for axis-mode lanes
 
     def test_capture_carries_error_profile(self):
-        # dvmerge attaches the STA concealment profile from dvrescue's -x XML to each source
+        # dvmerge attaches the per-capture concealment profile (mined from dvrescue's -x XML) to each
+        # source; normalize passes it through verbatim, including the richer fields (true-rate
+        # concealedFrac, full method histogram, audio side)
         dv = _dv()
         dv["sources"][0]["errorProfile"] = {
-            "concealedFrac": 1.0, "avgConcealedPct": 0.19, "evenSharePct": 0.49,
-            "staCode": 10, "staMethod": "prev-frame*"}
+            "framesSeen": 2976, "framesConcealed": 706, "concealedFrac": 0.237,
+            "avgConcealedPct": 0.49, "evenSharePct": 1.0, "staCode": 10, "staMethod": "prev-frame*",
+            "staHistogram": [{"code": 10, "method": "prev-frame*", "frac": 0.9},
+                             {"code": 15, "method": "uncorrected", "frac": 0.1}],
+            "audioFramesConcealed": 696, "audioConcealedFrac": 0.234}
         d = normalize.from_dvmerge(dv, "/work", {})
         cap = next(c for c in d["captures"] if c["tag"] == "A-1")
         self.assertEqual(cap["errorProfile"]["staMethod"], "prev-frame*")
-        self.assertEqual(cap["errorProfile"]["concealedFrac"], 1.0)
+        self.assertEqual(cap["errorProfile"]["concealedFrac"], 0.237)   # true all-frames rate
+        self.assertEqual(len(cap["errorProfile"]["staHistogram"]), 2)
+        self.assertEqual(cap["errorProfile"]["audioConcealedFrac"], 0.234)
         # a source with no profile (HDV-like) carries none
         other = next(c for c in d["captures"] if c["tag"] == "A-2")
         self.assertNotIn("errorProfile", other)

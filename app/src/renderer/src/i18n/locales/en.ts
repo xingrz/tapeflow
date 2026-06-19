@@ -77,9 +77,7 @@ export default {
     unplaced: '{count} unplaced',
     linkedTip: 'Every capture the engine placed is represented on the tape map above.',
     unplacedTip: '{count} capture(s) could not be placed onto the tape and are not in the merged output.',
-    lanesSegments: '{lanes} lanes · {segments} output segments',
-    lanesDvMerge: '{lanes} lanes · DV frame merge',
-    dvMerge: 'DV frame merge',
+    fragments: '{count} fragments',
     filesInWorkspace: '{count} files in workspace',
     collapse: 'Collapse captures',
     show: 'Captures',
@@ -87,11 +85,13 @@ export default {
     tapeTc: 'Tape TC',
     recordingTime: 'Recording time',
     quality: {
-      persistent: 'damaged ~{pct}/frame',
-      intermittent: '{pct} of frames damaged',
+      clean: 'clean',
+      cleanTip: 'all {seen} frames clean',
+      damagedTip: '{concealed} of {seen} frames damaged',
+      method: 'concealed via {method}',
+      audioTip: '{audio} frames with audio loss',
       headEven: 'even-field biased',
-      headOdd: 'odd-field biased',
-      tip: 'concealed ({method}) · {concealed}/{seen} frames · even-field share {even}'
+      headOdd: 'odd-field biased'
     }
   },
   status: {
