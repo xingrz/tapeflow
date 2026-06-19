@@ -1,6 +1,6 @@
 {
   "name": "tapeflow-app",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "tapeflow desktop UI (Electron + Vue) for the DV/HDV tape-merge workflow",
   "author": "XiNGRZ",
   "repository": {
