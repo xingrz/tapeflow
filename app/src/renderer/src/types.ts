@@ -73,6 +73,25 @@ export interface Segment {
   gapBefore: boolean
 }
 
+export type ArchiveTier = 'green' | 'yellow' | 'red'
+
+// The archive completeness marker (the "TF tag") for the merged master, computed by the sidecar so
+// the GUI badge, the default export name, and the CLI/skill all agree by construction. Completeness =
+// the share of tape frames with NO residual damage after the merge (floored: only a true 100.0%
+// reads as 100). `-N` in the tag is the residual spot count (dirty + missing). See AGENTS.md.
+export interface Archive {
+  tag: string // filename marker: "(TF99%-3)" / "(TF100%)"
+  short: string // bare badge form: "99%-3" / "100%"
+  pct: number // floored clean-frame percentage
+  tier: ArchiveTier // green only at a true 100 (zero residual), yellow >= 90, red below
+  totalSpots: number
+  dirtySpots: number
+  missingSpots: number
+  cleanFrames: number
+  dirtyFrames: number
+  missingFrames: number
+}
+
 export interface TapeAnalysis {
   schema: string
   format: 'hdv' | 'dv'
@@ -105,6 +124,7 @@ export interface TapeAnalysis {
   captures: Capture[]
   segments: Segment[]
   damage: DamageSpot[]
+  archive: Archive // the TF completeness marker; the badge + default export name read this
   divergences: unknown[]
 }
 

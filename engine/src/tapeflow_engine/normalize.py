@@ -200,6 +200,39 @@ def _hdv_segments(segs, total):
     return out
 
 
+def _archive(total, damage):
+    """The archive completeness marker (the "TF tag") for the merged master — the single definition
+    shared by the GUI badge, the default export name, and the CLI/skill. Completeness = the share of
+    tape frames with NO residual damage after the merge; a frame with any concealed/missing block is
+    not clean. Floored so only a true 100.0% reads as 100 (99.9% -> 99). ``totalSpots`` (= dirty +
+    missing damage entries) is the residual spot count, rendered as ``-N`` and dropped when zero.
+    ``tier`` keys the badge colour: green ONLY at a true 100 (zero residual), yellow >= 90, red below.
+    Mirrors the renderer's former ``archiveTag`` so both sides agree by construction."""
+    total = total or 0
+    missing_frames = sum(d["durationFrames"] for d in damage if d["kind"] == "missing")
+    dirty_frames = sum(d["durationFrames"] for d in damage if d["kind"] != "missing")
+    missing_spots = sum(1 for d in damage if d["kind"] == "missing")
+    dirty_spots = sum(1 for d in damage if d["kind"] != "missing")
+    defect = min(total, missing_frames + dirty_frames)       # spots can't cover more than the tape
+    clean_frames = max(0, total - defect)
+    pct = int((clean_frames / total) * 100) if total > 0 else 0   # int() floors a non-negative ratio
+    total_spots = dirty_spots + missing_spots
+    tier = "green" if pct >= 100 else "yellow" if pct >= 90 else "red"
+    short = "%d%%%s" % (pct, ("-%d" % total_spots) if total_spots else "")
+    return {
+        "tag": "(TF%s)" % short,    # the filename marker: "(TF99%-3)" / "(TF100%)"
+        "short": short,             # the bare badge form: "99%-3" / "100%"
+        "pct": pct,
+        "tier": tier,
+        "totalSpots": total_spots,
+        "dirtySpots": dirty_spots,
+        "missingSpots": missing_spots,
+        "cleanFrames": clean_frames,
+        "dirtyFrames": dirty_frames,
+        "missingFrames": missing_frames,
+    }
+
+
 def from_hdvmerge(hdv, working_dir, files_by_tag):
     """``hdvmerge.analysis/1`` dict -> ``tapeflow.analysis/1`` dict. Laid out by tape TC: HDV orders
     its islands by PCR so the TC axis is monotonic within a capture, and overlapping transfers of one
@@ -242,6 +275,7 @@ def from_hdvmerge(hdv, working_dir, files_by_tag):
         "captures": captures,
         "segments": _hdv_segments(segs, hdv["total_frames"]),
         "damage": damage,
+        "archive": _archive(hdv["total_frames"], damage),
         "divergences": hdv["divergences"],
     }
 
@@ -374,5 +408,6 @@ def from_dvmerge(dv, working_dir, files_by_tag):
         "captures": [_dv_capture(s, files_by_tag) for s in dv["sources"]],
         "segments": _dv_segments(dv),
         "damage": damage,
+        "archive": _archive(dv["total_frames"], damage),
         "divergences": [],
     }

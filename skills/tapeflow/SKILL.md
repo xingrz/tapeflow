@@ -106,14 +106,21 @@ clean `error: …` line on stderr — not a traceback.
 3. **Re-capture and re-analyse.** New captures get dropped into the same dir; re-run `analyze`. Only
    the new file is indexed. The damage list shrinks each round. To drive the deck and fill the gaps
    automatically, see **Automatic re-capture with tapecap** below.
-4. **Build — write it outside the captures dir.** When `buildable` is `true`,
-   `tapeflow build <dir> <output>` writes the merged file. Put `<output>` in a **subdirectory** (e.g.
-   `<dir>/out/merged.m2t`) or a sibling/parent — **never inside `<dir>` itself**: the merge is a
-   `.m2t`/`.dv` file, so leaving it among the captures makes the next `analyze` ingest your own output
-   as another "capture" and corrupt the result. (`analyze` lists only the top level and skips
-   subdirectories, so a subdir is safe.) For HDV the result carries a `verify` summary (AUX/timecode
-   survived, CC/TEI integrity, decode check); DV has `verify: null` (the merge and its metadata are
-   dvrescue's).
+4. **Build — name it after the tape, write it outside the captures dir.** When `buildable` is `true`,
+   `tapeflow build <dir> <output>` writes the merged file. Two rules for `<output>`:
+   - **Name** it after the working directory itself with the completeness tag appended, matching what
+     the TapeFlow app produces: **`<folder name> <archive.tag><ext>`** — use the working dir's own
+     basename (not a generic "merged"), one space, then `archive.tag` verbatim, then the format's
+     extension: **`.m2t` for HDV, `.dv` for DV** (the `format` field says which). E.g. a dir
+     `…/2010.10.29 校运会_CAM-C` whose analysis gives `archive.tag = "(TF99%-3)"` and `format = "dv"`
+     exports `2010.10.29 校运会_CAM-C (TF99%-3).dv`. The `(TF…)` is greppable and easy to strip later.
+   - **Place** it in a **subdirectory** (e.g. `<dir>/out/`) or a sibling/parent — **never inside
+     `<dir>` itself**: the merge is a `.m2t`/`.dv` file, so leaving it among the captures makes the next
+     `analyze` ingest your own output as another "capture" and corrupt the result. (`analyze` lists
+     only the top level and skips subdirectories, so a subdir is safe.)
+
+   For HDV the result carries a `verify` summary (AUX/timecode survived, CC/TEI integrity, decode
+   check); DV has `verify: null` (the merge and its metadata are dvrescue's).
 
 You can export a knowingly-incomplete tape as long as `buildable` is `true` (HDV refuses only on
 non-tape-adjacent seams); `complete` just tells you whether any damage remains.
@@ -137,6 +144,13 @@ The fields that drive decisions:
 - **`captures[]`** — one per source file: `tag`, `file`, `tcSpan`, `recSpan`.
 - **`tape`** — the reconstructed whole-tape span (`tcStart`/`tcEnd`, `recStart`/`recEnd`,
   `durationFrames`, `title`).
+- **`archive`** — the completeness **"TF tag"** for the merged master: the figure TapeFlow shows in
+  its title bar and stamps onto the export name. `archive.tag` is the ready-made marker, e.g.
+  `"(TF99%-3)"` or `"(TF100%)"` — read **`TF<percentage>%-<spots>`**, where the percentage is the
+  share of tape frames with **no** residual damage after the merge (floored, so only a genuine 100.0%
+  reads as `100`; 99.9% shows `99`), and `-N` is the residual spot count (`dirty + missing`, dropped
+  when zero). `archive.tier` colours it: `green` only at a true 100, `yellow` ≥ 90, `red` below. Use
+  `archive.tag` **verbatim** when naming the output (see Build) — don't recompute it yourself.
 
 Always use `tc`/`rec` to describe *where* a spot is — they are frame-accurate and shared. The `axis`
 field is an opaque per-engine integer for relative ordering only; never compute positions or

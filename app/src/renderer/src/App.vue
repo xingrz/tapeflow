@@ -21,19 +21,18 @@ import DamageSidebar from './components/DamageSidebar.vue'
 import ProgressModal from './components/ProgressModal.vue'
 import TapeMap from './components/TapeMap.vue'
 import { useWorkflowStore, type DamageView } from './stores/workflow'
-import { archiveTag } from './utils/analysis'
 import { formatDurationFrames } from './utils/format'
 import { LANG_PREFS, langPref, setLangPref, type LangPref } from './i18n'
 
 const workflow = useWorkflowStore()
 const settingsOpen = ref(false)
 
-// the archive completeness marker (e.g. "(TF99%-3)"), shown as a colour-tiered status badge in the
-// title bar; the export name carries the same tag, so the badge is read-only. null until a tape with
-// real extent is analysed
+// the archive completeness marker (e.g. "(TF99%-3)"), computed by the sidecar and carried on the
+// analysis; shown as a colour-tiered status badge in the title bar. The export name carries the same
+// tag, so the badge is read-only. null until a tape with real extent is analysed
 const archive = computed(() =>
   workflow.analysis && workflow.analysis.tape.durationFrames > 0
-    ? archiveTag(workflow.analysis)
+    ? workflow.analysis.archive
     : null
 )
 const langChoice = ref<LangPref>(langPref())

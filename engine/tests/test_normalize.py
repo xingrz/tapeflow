@@ -310,5 +310,35 @@ class TestNormalizeDv(unittest.TestCase):
         self.assertNotIn("errorProfile", other)
 
 
+class TestArchiveTag(unittest.TestCase):
+    """The archive completeness marker ("TF tag") — computed in the sidecar so the GUI badge, the
+    default export name, and the CLI/skill share one definition."""
+
+    def test_clean_tape_is_tf100_green(self):
+        a = normalize.from_dvmerge(_dv(), "/work", {})["archive"]
+        self.assertEqual(a["tag"], "(TF100%)")   # no "-N" suffix when there are zero residual spots
+        self.assertEqual(a["pct"], 100)
+        self.assertEqual(a["tier"], "green")
+        self.assertEqual(a["totalSpots"], 0)
+
+    def test_one_residual_frame_floors_to_99_and_counts_the_spot(self):
+        # 1 missing frame of 1000 = 99.9% clean, FLOORED to 99 (a true 100 means genuinely zero
+        # damage); one residual spot -> "(TF99%-1)", yellow tier
+        a = normalize.from_dvmerge(
+            _dv(spans=[_span("missing", cover=(), miss=5, dmg=0, bmax=0)], miss=5, complete=False),
+            "/work", {})["archive"]
+        self.assertEqual(a["pct"], 99)
+        self.assertEqual(a["tier"], "yellow")
+        self.assertEqual(a["totalSpots"], 1)
+        self.assertEqual(a["missingSpots"], 1)
+        self.assertEqual(a["tag"], "(TF99%-1)")
+
+    def test_hdv_carries_the_archive_too(self):
+        # the marker is format-agnostic — HDV gets it from the same helper
+        a = normalize.from_hdvmerge(_hdv(), "/work", {})["archive"]
+        self.assertEqual(a["tag"], "(TF100%)")
+        self.assertEqual(a["tier"], "green")
+
+
 if __name__ == "__main__":
     unittest.main()

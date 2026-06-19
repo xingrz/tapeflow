@@ -141,6 +141,10 @@ engine ran. The UI binds to **this** and nothing else.
       "coverage": ["capA","capB"],   // captures with some frame here; [] => nothing to improve on
       "copies": 2,
       "severity": "intra-frame damage" } ],
+  "archive": {                  // the completeness "TF tag" (see note); single source for badge + name
+    "tag": "(TF99%-3)", "short": "99%-3", "pct": 99, "tier": "yellow",  // tier: green only at a true 100
+    "totalSpots": 3, "dirtySpots": 2, "missingSpots": 1,
+    "cleanFrames": 60601, "dirtyFrames": 600, "missingFrames": 33 },
   "divergences": [ /* hdv-only: two clean copies disagree byte-wise; review items, optional */ ]
 }
 ```
@@ -152,6 +156,17 @@ engine (hdvmerge: GOP index; dvmerge: tape frame) and is not directly comparable
 frame-accurate axis unification across formats is a known refinement; until then, treat `axis` as
 "good enough for drawing bars in order", and `tc`/`rec` as the source of truth for what a position
 *is*.
+
+**The archive "TF tag" (`archive`):** a single archival figure for the merged master — *how complete
+is this copy* — computed once **in the sidecar** (`normalize._archive`) so the title-bar badge, the
+default export name, and the CLI/skill all agree by construction (it used to live only in the
+renderer; that copy is gone). Completeness `pct` = the share of tape frames with **no** residual
+damage after the merge (a frame with any concealed/missing block is not clean), **floored** so only a
+true 100.0% reads as 100. `tag` is the filename marker `(TF<pct>%-<spots>)` — the `TF` prefix and
+parens make it greppable and easy to strip — where `-<spots>` is the residual spot count (`dirty +
+missing`), dropped at zero. `tier` keys the badge colour: `green` only at a true 100 (zero residual),
+`yellow` ≥ 90, `red` below. The renderer reads `analysis.archive` (never recomputes); the default
+export name is `<working-folder name> <archive.tag><ext>`.
 
 **Mapping cheat-sheet** (sidecar's job):
 - hdvmerge `complete`/`fps`/`total_frames` → `complete`/`fps`/`tape.durationFrames`;
