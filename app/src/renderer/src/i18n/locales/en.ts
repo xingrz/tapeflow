@@ -77,7 +77,7 @@ export default {
     unplaced: '{count} unplaced',
     linkedTip: 'Every capture the engine placed is represented on the tape map above.',
     unplacedTip: '{count} capture(s) could not be placed onto the tape and are not in the merged output.',
-    fragments: '{count} fragments',
+    count: '{count} captures',
     filesInWorkspace: '{count} files in workspace',
     collapse: 'Collapse captures',
     show: 'Captures',
@@ -103,9 +103,11 @@ export default {
   tasks: {
     title: 'Preparing workspace',
     hint: 'Copying and indexing the captures.',
+    count: '{done} / {total} captures',
     dvLabel: 'dvrescue merge',
     remaining: '{eta} left',
     stage: {
+      pending: 'queued',
       copying: 'copying',
       indexing: 'indexing',
       merging: 'merging',

@@ -75,6 +75,16 @@ def _analyze_hdv(directory, files, notify):
     # Index file-by-file (this mirrors hdvmerge.scan.analyze) so we can announce WHICH file is
     # starting: the byte-level on_progress can't say which file it is in, and on_file fires only on
     # completion — without a start signal the UI can't show a per-file "indexing" state.
+    if notify:
+        # announce up front WHICH fragments this run will actually index: a cheap cache pre-check
+        # (needs_index — fingerprint + cache validity, no scan) drops the already-indexed ones, so the
+        # modal lists and counts only the real work — and a re-analyse of an indexed dir shows just the
+        # newly dropped files, not the whole set. Fall back to the full list if the pinned hdvmerge
+        # predates needs_index.
+        check = getattr(hscan, "needs_index", None)
+        todo = [p for p in files if check is None or check(p, decode=decode, cache_dir=cache_dir)]
+        notify("progress", {"phase": "index-plan", "total": len(todo),
+                            "files": [os.path.basename(p) for p in todo]})
     sources = []
     for path in files:
         if notify:

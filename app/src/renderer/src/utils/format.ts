@@ -47,6 +47,7 @@ export function shortPath(path: string | null | undefined): string {
 export function formatProgress(p: Progress): string {
   // the byte percent now lives per-file in each capture's index badge, so the global text just
   // names which file is being indexed (no percent)
+  if (p.phase === 'index-plan') return '' // batch-total signal for the modal counter, no topbar text
   if (p.phase === 'index-start' && p.file) return t('progress.indexing', { file: p.file })
   if (p.phase === 'indexing') return ''
   if (p.phase === 'copying') return '' // per-file copy bytes drive the task modal, not the topbar

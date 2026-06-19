@@ -144,6 +144,7 @@ export interface Progress {
   done?: number
   total?: number
   file?: string
+  files?: string[] // index-plan: the basenames this run will actually index (cached ones excluded)
   cached?: boolean
   tool?: string
 }

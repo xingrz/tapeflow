@@ -94,7 +94,7 @@ function compareMtime(a: number | undefined, b: number | undefined): number {
             {{ analysis.summary.unusedCaptures ? $t('captures.unplaced', { count: analysis.summary.unusedCaptures }) : $t('captures.allLinked') }}
           </span>
         </div>
-        <p v-if="analysis">{{ $t('captures.fragments', { count: analysis.captures.length }) }}</p>
+        <p v-if="analysis">{{ $t('captures.count', { count: analysis.captures.length }) }}</p>
         <p v-else>{{ $t('captures.filesInWorkspace', { count: captures.length }) }}</p>
       </div>
       <button class="panel-action" type="button" :title="$t('captures.collapse')" @click="emit('collapse')">

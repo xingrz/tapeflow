@@ -37,7 +37,7 @@ export interface WorkspaceCaptureView extends WorkspaceCapture {
 // real work begins — a dropped file being 'copying', or a non-cached file's byte-level 'indexing' —
 // so pre-existing cache hits never get a row. DV indexing is one opaque dvrescue merge with no byte
 // progress, so it shows as an indeterminate 'merging' step.
-export type TaskStage = 'copying' | 'indexing' | 'merging' | 'done'
+export type TaskStage = 'pending' | 'copying' | 'indexing' | 'merging' | 'done'
 
 export interface TaskView {
   file: string
@@ -69,6 +69,10 @@ export const useWorkflowStore = defineStore('workflow', () => {
   const tasks = ref<Record<string, TaskView>>({})
   const taskOrder = ref<string[]>([])
   const taskModalOpen = ref(false)
+  // HDV announces its batch size up front so the modal shows "done / total" instead of fragments
+  // trickling in one row at a time. indexTotal = 0 means no batch to count (DV, or pre-analyse).
+  const indexTotal = ref(0)
+  const indexDone = ref(0) // counts every fragment that finished — cached hits too — so it reaches total
   const taskSamples: Record<string, { bytes: number; t: number; speed: number }> = {}
   // synthetic task-row key for the opaque DV merge step — DV runs as one dvrescue subprocess with
   // no per-file progress, so its row can't be keyed by a filename like HDV's are. A leading NUL
@@ -80,6 +84,9 @@ export const useWorkflowStore = defineStore('workflow', () => {
 
   let unsubscribeProgress: (() => void) | null = null
   let indexingFile: string | null = null // the file the byte-level 'indexing' events belong to
+  // the fragments this run will actually index (from index-plan's pre-check); rows + the done-count
+  // are limited to these, so cached files this round neither show nor inflate the total
+  let indexPlanned = new Set<string>()
 
   const damageViews = computed<DamageView[]>(() => {
     if (!analysis.value) return []
@@ -198,19 +205,24 @@ export const useWorkflowStore = defineStore('workflow', () => {
     if (p.phase === 'copying' && p.file) {
       setTaskBytes(p.file, 'copying', p.done ?? 0, p.total ?? 0)
     } else if (p.phase === 'indexing' && indexingFile && p.total) {
-      // Create the row lazily, on the first byte-progress event. A pre-existing cache hit does no
-      // byte work (load_index emits no on_progress), so it never gets a row — only files actually
-      // being (re)indexed this round appear here. ('index-start' is intentionally NOT a trigger: it
-      // fires for cache hits too, before we know they're cached.)
+      // byte progress of the current file — moves its (pre-seeded) row from pending into indexing.
       setTaskBytes(indexingFile, 'indexing', p.done ?? 0, p.total)
     } else if (p.phase === 'indexed' && p.file) {
       const key = matchCapture(p.file)?.file ?? p.file
-      // Surface a freshly-indexed file (covers a tiny one that finished with no byte events) and
-      // complete a dragged file's copy row. A pre-existing cache hit that did no work this round has
-      // no row, so it stays hidden.
-      if (!p.cached || taskOrder.value.includes(key)) setTaskStage(key, 'done')
+      // count and complete only the fragments this run planned to index; a cached file that did no
+      // work isn't in the plan, so it neither counts nor shows. (the taskOrder check also completes
+      // a dragged file's copy row, which lives outside the index plan.)
+      if (indexPlanned.has(key)) indexDone.value += 1
+      if (indexPlanned.has(key) || taskOrder.value.includes(key)) setTaskStage(key, 'done')
     } else if (p.phase === 'merging') {
       setTaskStage(DV_MERGE, 'merging')
+    } else if (p.phase === 'index-plan') {
+      // the to-index set (cached fragments already excluded), sent before the per-file rows: seed a
+      // pending row for each so the whole list and the total show at once instead of trickling in.
+      indexPlanned = new Set((p.files ?? []).map((f) => matchCapture(f)?.file ?? f))
+      indexTotal.value = p.total ?? indexPlanned.size
+      indexDone.value = 0
+      for (const key of indexPlanned) setTaskStage(key, 'pending')
     }
   }
 
@@ -226,6 +238,9 @@ export const useWorkflowStore = defineStore('workflow', () => {
     }
     tasks.value = {}
     taskOrder.value = []
+    indexTotal.value = 0 // a fresh run; the count resets until HDV's index-plan arrives (DV sends none)
+    indexDone.value = 0
+    indexPlanned = new Set()
     for (const k of Object.keys(taskSamples)) delete taskSamples[k]
     if (immediate) {
       taskModalOpen.value = true
@@ -246,6 +261,9 @@ export const useWorkflowStore = defineStore('workflow', () => {
     taskModalOpen.value = false
     tasks.value = {}
     taskOrder.value = []
+    indexTotal.value = 0
+    indexDone.value = 0
+    indexPlanned = new Set()
   }
 
   async function init(): Promise<void> {
@@ -531,6 +549,8 @@ export const useWorkflowStore = defineStore('workflow', () => {
     captureViews,
     taskList,
     taskModalOpen,
+    indexTotal,
+    indexDone,
     damageViews,
     outstandingDamage,
     acceptedDamage,

@@ -77,7 +77,7 @@ export default {
     unplaced: '{count} 个未排入',
     linkedTip: '引擎排入的每个采集都已呈现在上方的磁带图中。',
     unplacedTip: '{count} 个采集无法排入磁带，未包含在合并输出中。',
-    fragments: '{count} 个碎片',
+    count: '{count} 个采集',
     filesInWorkspace: '工作区中有 {count} 个文件',
     collapse: '折叠采集面板',
     show: '采集',
@@ -103,9 +103,11 @@ export default {
   tasks: {
     title: '正在准备工作区',
     hint: '正在复制并索引采集文件。',
+    count: '{done} / {total} 个采集',
     dvLabel: 'dvrescue 合并',
     remaining: '剩 {eta}',
     stage: {
+      pending: '排队中',
       copying: '复制中',
       indexing: '索引中',
       merging: '合并中',

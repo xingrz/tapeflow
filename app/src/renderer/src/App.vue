@@ -359,7 +359,12 @@ function clamp(value: number, min: number, max: number): number {
       <span>{{ workflow.dir ? $t('drop.willCopy') : $t('drop.needWorkspace') }}</span>
     </div>
 
-    <ProgressModal :open="workflow.taskModalOpen" :tasks="workflow.taskList" />
+    <ProgressModal
+      :open="workflow.taskModalOpen"
+      :tasks="workflow.taskList"
+      :index-done="workflow.indexDone"
+      :index-total="workflow.indexTotal"
+    />
 
     <Teleport to="body">
       <div v-if="settingsOpen" class="modal-overlay" @click="settingsOpen = false">

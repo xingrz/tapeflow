@@ -6,7 +6,15 @@ import { formatEta, formatSpeed } from '../utils/format'
 defineProps<{
   open: boolean
   tasks: TaskView[]
+  indexDone: number
+  indexTotal: number
 }>()
+
+// only an actively-working stage with no byte total gets the sliding animation; everything else —
+// including a queued (pending) row — gets a real width, so pending reads as an empty 0% bar, not full
+function isIndeterminate(task: TaskView): boolean {
+  return !task.determinate && task.stage !== 'done' && task.stage !== 'pending'
+}
 </script>
 
 <template>
@@ -18,6 +26,10 @@ defineProps<{
             <Loader2 :size="16" class="spin" />
             {{ $t('tasks.title') }}
           </h2>
+          <!-- the whole-batch total (HDV), so the count is visible before per-file rows trickle in -->
+          <span v-if="indexTotal" class="tasks-count">
+            {{ $t('tasks.count', { done: indexDone, total: indexTotal }) }}
+          </span>
         </div>
         <p class="tasks-hint">{{ $t('tasks.hint') }}</p>
         <ul class="task-list">
@@ -31,10 +43,8 @@ defineProps<{
             <div class="progress-track">
               <div
                 class="progress-fill"
-                :class="{ indeterminate: !task.determinate && task.stage !== 'done' }"
-                :style="task.determinate || task.stage === 'done'
-                  ? { width: `${Math.round(task.progress * 100)}%` }
-                  : undefined"
+                :class="{ indeterminate: isIndeterminate(task) }"
+                :style="isIndeterminate(task) ? undefined : { width: `${Math.round(task.progress * 100)}%` }"
               />
             </div>
             <div class="task-meta">
@@ -62,10 +72,22 @@ defineProps<{
   display: flex;
   flex-direction: column;
 }
+.tasks-panel .modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
 .tasks-panel .modal-head h2 {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+.tasks-count {
+  flex: none;
+  font-size: 12px;
+  color: var(--text-muted, #9aa6a0);
+  font-variant-numeric: tabular-nums;
 }
 .tasks-hint {
   margin: 0 0 14px;
@@ -106,6 +128,9 @@ defineProps<{
   letter-spacing: 0.04em;
   color: var(--text-muted, #9aa6a0);
 }
+.task-stage.pending {
+  opacity: 0.6; /* a queued fragment, not yet started */
+}
 .task-stage.copying {
   color: var(--accent, #5fb0ff);
 }
@@ -118,11 +143,13 @@ defineProps<{
 }
 .task-meta {
   display: flex;
+  align-items: center;
   gap: 12px;
   font-size: 11px;
-  /* reserve the line even when empty (a queued row has no %/speed/ETA) so a row keeps the same
-     height through pending -> indexing and the modal doesn't grow/shrink on every transition */
-  min-height: 15px;
+  /* a FIXED height (not min-height): a queued row has no %/speed/ETA and an indexing row does, but
+     both must occupy the same height or the list — and the modal — jitters on every transition.
+     min-height let the text line (≈15.4px) edge past the reserved 15px; a fixed box ends that. */
+  height: 16px;
   color: var(--text-muted, #9aa6a0);
   font-variant-numeric: tabular-nums;
 }
