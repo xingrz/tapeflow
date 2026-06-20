@@ -171,24 +171,45 @@ capture, seek and transport command**; the steps below are only the orchestratio
 top, with `analyze`'s `damage[]`/`tape` timecodes as the targets. Each pass writes a *new* file into
 `<dir>`; re-run `analyze` after every pass (only the new file is indexed, so it's fast).
 
-1. **Capture wider than the gap.** A `damage[]` entry's `tcStart`/`tcEnd` are the *damaged* bounds,
+1. **Work one target loop at a time.** A **target** is one capture aim — a single `damage[]` spot, or
+   a small group of tightly adjacent spots merged into one window (see the 2-minute hard cap below).
+   Pick the earliest outstanding target, capture it once, then immediately re-run `tapeflow analyze
+   <dir>` before moving on. Do **not** capture the full A/B/C/D queue before re-analysis: the damage
+   list is live state, and each new fragment can change, shrink, merge, or eliminate later targets.
+2. **Capture wider than the gap.** A `damage[]` entry's `tcStart`/`tcEnd` are the *damaged* bounds,
    not the capture bounds — aim the window a margin outside them on both sides so the new fragment
    comfortably overlaps the neighbouring good material the merge needs to stitch it in.
-2. **Batch neighbours; seek sparingly.** Sort `damage[]` by `tcStart` and roll through it in one
-   continuous pass, capturing straight across adjacent spots. Only fast-wind to the next spot when the
-   clean gap between them exceeds **~2 minutes** — every stop-start and re-seek wears the transport, so
-   rolling through a minute or two of good tape is cheaper than stopping and re-positioning.
-3. **Re-analyse, retry a spot up to 3×.** After a capture, re-run `analyze`. If a spot you just
-   covered is still in `damage[]`, rewind and re-capture just that spot — capped at **3 attempts**. A
-   spot that hasn't improved in 3 tries won't this round; mark it skipped and move on so you don't
-   grind the transport on one place.
-4. **Global cleanup pass (up to twice).** Once you've been down the whole tape, go back to the spots
-   skipped after 3 tries and try them again, same **3-strikes-then-skip** rule per spot. Repeat this
+3. **At the head and tail, the capture must reach the physical edge — at least twice.** `analyze`'s
+   `tape` span and `complete` verdict are *reconstructed from the captures*: the analysis can't see
+   anything earlier than the earliest captured frame or later than the latest, so it will never flag
+   head/tail content that **no** capture reached — and step 2's margin has no tape to sit in once a
+   target touches the edge. So a target at or near the **start** must be captured starting from the
+   physical beginning of the tape, and one at or near the **end** must run to the physical end; follow
+   the tapecap skill for how to reach those edges. Because the oracle can't cross-check the edges, give
+   each edge that needs work **at least two independent passes**, re-analysing after each, even if the
+   first looks clean.
+4. **Only batch truly nearby neighbours.** You may group adjacent spots into one capture window — that
+   group then counts as a single target — only when the clean gap between the end of one spot and the
+   start of the next is **2 minutes or less**: rolling the deck across a short good stretch is cheaper
+   than the stop-and-re-seek a separate target costs, and every re-seek wears the transport. Treat 2
+   minutes as a **hard maximum**, not a suggestion: if two spots are 2:01 apart, or if the gap cannot
+   be computed confidently from `tcStart`/`tcEnd`, do not batch them. A 9-minute gap is always a
+   separate target.
+5. **Re-analyse, then retry the same target up to 3×.** After every completed capture file, re-run
+   `analyze`. Do not use tapecap's reported error counts, dropped frames, decode errors, or capture
+   quality summary to decide whether the attempt succeeded; those are transport telemetry only. The
+   only repair oracle is the fresh `tapeflow.analysis/1` `damage[]` list after the new file is in the
+   working dir. If the target you just covered is still present (by TC overlap, not by `id`), rewind
+   and re-capture that same target — capped at **3 attempts**. A target that hasn't improved in 3 tries
+   won't this round; mark it skipped and move on so you don't grind the transport on one place.
+6. **Global cleanup pass (up to twice).** Once you've been down the whole tape, go back to the targets
+   skipped after 3 tries and try them again, same **3-strikes-then-skip** rule per target. Repeat this
    whole-tape cleanup at most **twice**.
-5. **Stress-release, then a final attempt.** If two cleanup passes still leave spots failing, run the
-   tape end to end once — full rewind to `tape.tcStart`, then fast-forward to `tape.tcEnd` — to relieve
-   its tension, then give each still-failing spot **2 more tries**.
-6. **Stop and ask.** If spots still fail after that, **stop** — don't keep cycling the deck on a spot
+7. **Stress-release, then a final attempt.** If two cleanup passes still leave targets failing, run
+   the tape end to end once across its **full physical length** (not merely the captured
+   `tcStart`→`tcEnd` span) — see the tapecap skill for the transport — to relieve its tension, then
+   give each still-failing target **2 more tries**.
+8. **Stop and ask.** If any still fail after that, **stop** — don't keep cycling the deck on a spot
    the tape can't give up. Report what's left (each spot's `tc`, `kind` and `coverage`/`copies`) and
    ask the user whether to `build` the merged file as it stands (`buildable` is usually still `true`)
    or leave it for a manual attempt.
