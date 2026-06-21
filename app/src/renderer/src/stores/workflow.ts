@@ -321,15 +321,21 @@ export const useWorkflowStore = defineStore('workflow', () => {
     // the files actually (re)indexed or dragged this round — pre-existing cache hits never appear.
     try {
       const result = await window.api.analyze(dir.value)
-      const existing = new Map(workspaceCaptures.value.map((item) => [item.file, item]))
-      const sortedResult = sortAnalysisCaptures(result, existing)
+      // Re-stat every file (incl. ones dragged in this round): the GUI orders captures by real mtime,
+      // and reusing the pre-analyse map would leave new files with no mtime — pinning them to the top
+      // of the captures panel (0) and the bottom of the tape map (NaN). listCaptures gives every file
+      // its true mtime so both panels agree.
+      const onDisk = new Map(
+        (await window.api.listCaptures(dir.value)).map((item) => [item.file, item])
+      )
+      const sortedResult = sortAnalysisCaptures(result, onDisk)
       analysis.value = sortedResult
       workspaceCaptures.value = result.captures.map((capture) => ({
         file: capture.file,
         stem: capture.tag,
         format: result.format,
-        sizeBytes: existing.get(capture.file)?.sizeBytes ?? 0,
-        mtimeMs: existing.get(capture.file)?.mtimeMs ?? 0
+        sizeBytes: onDisk.get(capture.file)?.sizeBytes ?? 0,
+        mtimeMs: onDisk.get(capture.file)?.mtimeMs ?? Number.NaN
       })).sort(compareWorkspaceCaptures)
       finalizeCaptureStatuses()
       checklist.value = reconcileChecklist(checklist.value, sortedResult)

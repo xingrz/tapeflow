@@ -1,5 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
-import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, readdir, stat, utimes, writeFile } from 'node:fs/promises'
 import { createReadStream, createWriteStream } from 'node:fs'
 import { pipeline } from 'node:stream/promises'
 import { basename, delimiter, extname, join, parse, resolve } from 'node:path'
@@ -123,7 +123,8 @@ async function listCaptures(dir: string): Promise<object[]> {
 // Stream-copy src -> dest, sending throttled `{phase:'copying', file, done, total}` progress so the
 // renderer can show a per-file copy bar with speed / ETA. A final 100% event always fires.
 async function copyWithProgress(src: string, dest: string, file: string): Promise<void> {
-  const total = (await stat(src)).size
+  const st = await stat(src)
+  const total = st.size
   const rs = createReadStream(src)
   const ws = createWriteStream(dest)
   let done = 0
@@ -137,6 +138,9 @@ async function copyWithProgress(src: string, dest: string, file: string): Promis
     }
   })
   await pipeline(rs, ws)
+  // Preserve the source timestamps: a capture's mtime is its capture time, which the GUI orders by —
+  // a fresh copy-time mtime would scramble that order. Best-effort; a failure here mustn't fail ingest.
+  await utimes(dest, st.atime, st.mtime).catch(() => {})
   win?.webContents.send('progress', { phase: 'copying', file, done: total, total })
 }
 
