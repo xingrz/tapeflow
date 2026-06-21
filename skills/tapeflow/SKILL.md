@@ -156,6 +156,21 @@ Always use `tc`/`rec` to describe *where* a spot is — they are frame-accurate 
 field is an opaque per-engine integer for relative ordering only; never compute positions or
 durations from it.
 
+**Not every reported figure is damage.** The only "is the tape still damaged?" signals are
+**`complete`** and **`damage[]`** (counted by `summary.recaptureSpots`). Two HDV-only fields look
+alarming but are **not** damage and **never** call for re-capturing — don't report them to the user as
+remaining problems or let them block a build:
+
+- **`divergences[]`** — spots where two otherwise-*clean* copies differ byte-for-byte (typically a deck
+  re-locking differently at a record-pause seam). Review-only: the merge already picked one copy, and a
+  divergence never enters `damage[]`, never lowers `complete`, and is not a re-capture target.
+- the built file's **`verify.seam_discontinuities`** — a count of timestamp (DTS) steps a demuxer sees
+  at each splice. A byte-exact merge never rewrites PTS/DTS, so the DTS steps at every cross-capture
+  join; this can affect some players' seeking but **not the picture**, and never fails the build. A
+  higher count just means more fragments were stitched together (e.g. after adding more re-captures) —
+  it is **not** more damage. Fewer captures that already reach `complete` give a cleaner (fewer-seam)
+  master with the *same* completeness.
+
 ## Automatic re-capture with tapecap (optional)
 
 `analyze` only *finds* the gaps — filling them means replaying the tape. If the user asks to
