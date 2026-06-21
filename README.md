@@ -84,7 +84,8 @@ The installed TapeFlow app bundles this CLI, so once you've installed TapeFlow (
 locates it automatically — no separate CLI install needed. For a headless box without the app — a NAS
 or server that just has Python — grab the standalone `tapeflow-<version>.pyz` from
 [Releases](https://github.com/xingrz/tapeflow/releases) and run it with any `python3` (≥ 3.7), e.g.
-`python3 tapeflow-<version>.pyz verify <master>`.
+`python3 tapeflow-<version>.pyz verify <master>`. (`verify` is a conservative, read-only read of one
+finished file — handy for triage; `analyze` the source captures for the best-achievable completeness.)
 
 It teaches the agent to check whether a folder of captures adds up to a complete tape, report exactly
 which spots still need re-capturing, export the merged file, and audit or re-tag an already-exported

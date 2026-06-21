@@ -92,6 +92,16 @@ tapeflow's build until the pin is deliberately bumped.
   crash, surface errors to the UI).
 - **The sidecar imports the engines as Python libraries** (calls `jsonout.analysis`, `build`, etc.)
   and does the format-routing + normalisation. It is the *only* place that knows both engines.
+- **`analyze` vs `verify` — two different questions.** `analyze <dir>` is the *best master these
+  captures could build*: a frame with a clean copy in **some** capture counts clean (recoverable, so a
+  cascaded ffmpeg decode error is discredited against the clean twin). `verify <file>` is *what one
+  already-built master is*, decoded as-is and **read-only** — a conservative lower bound (≤ `analyze`):
+  a complete master reads the same, but past a real residual a lone file has no twin to discredit those
+  cascaded errors against, so it counts them. (Distinct from `verify`: hdvmerge's `verify_build` is the
+  build's *own* post-build self-check. It shares the plan-independent parts — duplicate detection and
+  AUX/TS soundness, the same code — but its decode/CC check is *plan-aware* (it forgives decode errors
+  the plan already explains), so it's exact where the standalone `verify` stays conservative. Both run
+  the same single ffmpeg decode; only the context to forgive a cascade differs.)
 - **Ownership split:** filesystem, the working dir, drag-drop copy, and workflow state
   (`.tapeflow/state.json`: the re-capture checklist, accepted-unrecoverable spots) belong to
   **Electron main**. Analysis, merge, and thumbnails belong to the **sidecar**. Engine caches live

@@ -203,10 +203,12 @@ only. It prints `tapeflow.verify/1`; act on these fields, **in this order**:
 - **`summary`** / **`damage[]`** — where and how much is incomplete (for the human report).
 
 Keep two things straight: **a duplicate ⇒ re-build; an incomplete tag ⇒ go back to the sources** — never
-re-capture over a duplicate. And the self-assessed tag is a *lower bound*: a true 100% master reads
-100%, but one that carries real damage can read slightly low (with no sibling capture present, ffmpeg's
-cascaded decode errors can't be discredited against a clean twin) — for the authoritative best tag,
-`analyze` the source dir.
+re-capture over a duplicate. And `verify` and `analyze` answer **different questions**: `analyze` is the
+*best a master could be* from the captures (a recoverable frame — clean in some copy — counts clean);
+`verify` is *what this one file already is*, decoded as-is, so it's a conservative **lower bound** (≤
+`analyze`). A true 100% master reads 100% either way; only *past a real damaged spot* can `verify` read a
+touch low — a lone file has no clean twin to discredit ffmpeg's cascaded decode errors against — so for
+the best achievable tag, `analyze` the source dir.
 
 ## Automatic re-capture with tapecap (optional)
 
