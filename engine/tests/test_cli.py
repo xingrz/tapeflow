@@ -44,6 +44,23 @@ class TestCli(unittest.TestCase):
         self.assertEqual(code, 2)
         self.assertIn("error:", err)
 
+    def test_verify_requires_file_positional(self):
+        with self.assertRaises(SystemExit):           # argparse: `verify` needs a file
+            _run(["verify"])
+
+    def test_verify_bad_file_reports_error(self):
+        code, out, err = _run(["verify", "/no/such/file/xyzzy.m2t"])
+        self.assertEqual(code, 2)                     # ValueError -> clean error, not a traceback
+        self.assertEqual(out, "")
+        self.assertIn("error:", err)
+
+    def test_verify_rejects_dv(self):
+        d = tempfile.mkdtemp()
+        _touch(d, "x.dv")                             # verify is HDV-only; a DV file is a user error
+        code, _, err = _run(["verify", os.path.join(d, "x.dv")])
+        self.assertEqual(code, 2)
+        self.assertIn("error:", err)
+
     def test_capabilities_prints_json(self):
         code, out, _ = _run(["capabilities"])         # no engines/binaries needed; reports absence
         self.assertEqual(code, 0)

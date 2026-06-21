@@ -55,6 +55,61 @@ def analyze(params, notify=None):
     return _analyze_dv(directory, files, notify)
 
 
+def verify(params, notify=None):
+    """``{"file": ...}`` -> ``tapeflow.verify/1``: audit ONE already-built master from the file alone —
+    its self-assessed completeness (the same ``archive`` "TF tag" a build stamps) and any duplicate
+    frames. **Strictly read-only**: the file is indexed in memory with ``use_cache=False`` (no
+    ``.tapeflow`` cache, no temp files), so it is safe against a master on a read-only / NAS volume.
+
+    The tag is computed by re-running the merge analysis on the single file: a truly complete master
+    re-reads as 100% (the build re-phases CC continuous, so seams carry no break; gaps/residuals are
+    detected from the file's own tc/rec and damage flags). A master that genuinely carries residual
+    damage may read slightly under its original tag — with no other capture present, ffmpeg's cascaded
+    decode errors can't be discredited against a clean twin — but a 100% master is unaffected."""
+    path = params.get("file")
+    if not path or not os.path.isfile(path):
+        raise ValueError("not a file: %r" % path)
+    ext = os.path.splitext(path)[1].lower()
+    if ext in DV_EXTS:
+        raise ValueError("verify currently supports HDV masters only; got a DV file: %s" % path)
+    if ext not in HDV_EXTS:
+        raise ValueError("not a recognised master file (expected .m2t/.ts/…): %s" % path)
+    return _verify_hdv(path, notify)
+
+
+def _verify_hdv(path, notify):
+    _bootstrap.ensure_engines_importable()
+    from hdvmerge import (scan as hscan, plan as hplan, jsonout as hjson, probe as hprobe,
+                          verify as hverify)
+    from hdvmerge.model import Report
+    if notify:
+        notify("progress", {"phase": "index-start", "file": os.path.basename(path)})
+    idx = hscan.ensure_index(path, decode=hprobe.have_ffmpeg(), use_cache=False)   # read-only: no cache
+    if idx is None:
+        raise ValueError("not a readable MPEG-TS master: %s" % path)
+    if notify:
+        notify("progress", {"phase": "indexed", "file": idx.tag, "cached": False})
+    rep = Report(sources=[idx], chain=[idx.tag], shifts={idx.tag: 0}, gaps=[])
+    plan = hplan.build_plan(rep)
+    hdv = hjson.analysis(rep, plan)
+    directory = os.path.dirname(os.path.abspath(path))
+    norm = normalize.from_hdvmerge(hdv, directory, {idx.tag: os.path.basename(path)})
+    sound, sinfo = hverify.verify(path)
+    return {
+        "schema": "tapeflow.verify/1",
+        "format": "hdv",
+        "file": os.path.basename(path),
+        "archive": norm.get("archive"),
+        "complete": norm.get("complete"),
+        "summary": norm.get("summary"),
+        "damage": norm.get("damage"),
+        "duplicateFrames": hverify._duplicate_frames(idx.gops),
+        "sound": bool(sound),
+        "tc": {"head": sinfo.get("tc_head"), "tail": sinfo.get("tc_tail")},
+        "rec": {"head": sinfo.get("rec_head"), "tail": sinfo.get("rec_tail")},
+    }
+
+
 def _analyze_hdv(directory, files, notify):
     _bootstrap.ensure_engines_importable()
     from hdvmerge import scan as hscan, plan as hplan, jsonout as hjson, probe as hprobe

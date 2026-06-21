@@ -62,6 +62,10 @@ def analyze(params, notify=None):
     return analyzemod.analyze(params, notify=notify)
 
 
+def verify(params, notify=None):
+    return analyzemod.verify(params, notify=notify)
+
+
 def build(params, notify=None):
     return buildmod.build(params, notify=notify)
 
@@ -77,6 +81,7 @@ def damageFrame(params, notify=None):
 METHODS = {
     "capabilities": capabilities,
     "analyze": analyze,
+    "verify": verify,
     "build": build,
     "thumbnail": thumbnail,
     "damageFrame": damageFrame,
