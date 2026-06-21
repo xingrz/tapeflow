@@ -4,8 +4,10 @@ description: >-
   Rescue a worn DV or HDV camcorder tape from several overlapping captures by merging the clean
   parts into one complete video. Use when given a folder of repeated tape captures (.dv or .m2t/.ts)
   and asked to check whether they add up to a complete recording, find which spots still need
-  re-capturing, or export the merged file. Drives tapeflow's CLI over its hdvmerge/dvmerge engines,
-  and can optionally drive the tapecap CLI to re-capture the damaged spots over FireWire itself.
+  re-capturing, or export the merged file. Also audits an already-exported master file on its own
+  (read-only) — its completeness "TF tag" and any duplicate frames — to tag or re-check masters, e.g.
+  on a NAS. Drives tapeflow's CLI over its hdvmerge/dvmerge engines, and can optionally drive the
+  tapecap CLI to re-capture the damaged spots over FireWire itself.
 metadata:
   internal: false
 ---
@@ -74,7 +76,11 @@ substitute whichever invocation you found.)
 
    (An app built before this CLI shipped won't have `tapeflow-cli` — if the file isn't there, fall
    through.)
-4. **None found** — don't guess or auto-install. Tell the user to install TapeFlow (`brew install
+4. **A portable `tapeflow-*.pyz`** — a single-file zipapp (downloaded from the
+   [Releases](https://github.com/xingrz/tapeflow/releases) page, or built locally). Run it with any
+   `python3` (≥ 3.7): `python3 tapeflow-<version>.pyz <cmd>`. No install, no CPU-arch or glibc concerns —
+   the right fit on a NAS or server that already has Python (e.g. to `verify` masters in place).
+5. **None found** — don't guess or auto-install. Tell the user to install TapeFlow (`brew install
    --cask xingrz/tap/tapeflow`, or a build from the [Releases](https://github.com/xingrz/tapeflow/releases)
    page) or the `tapeflow` CLI, then retry.
 
@@ -84,14 +90,15 @@ for DV; **ffmpeg** is recommended (it powers HDV damage detection).
 
 ## Commands
 
-All three print one JSON document to **stdout**; progress streams to **stderr**. `--compact` (single-line
-JSON) is a global flag — put it *before* the subcommand: `tapeflow --compact analyze <dir>`.
+Each command prints one JSON document to **stdout**; progress streams to **stderr**. `--compact`
+(single-line JSON) is a global flag — put it *before* the subcommand: `tapeflow --compact analyze <dir>`.
 
 | Command | Purpose |
 | --- | --- |
 | `tapeflow capabilities` | Engine imports + ffmpeg/dvrescue presence and versions. |
 | `tapeflow analyze <dir>` | Route the working dir by format and print the unified `tapeflow.analysis/1`. |
 | `tapeflow build <dir> <output>` | Export the merged file (byte-for-byte the engine merge). |
+| `tapeflow verify <file>` | Audit one already-built master from the file alone (read-only): `tapeflow.verify/1`. |
 
 Exit code is `0` on success, `2` on a user error (bad dir, mixed formats, missing dvrescue) with a
 clean `error: …` line on stderr — not a traceback.
@@ -176,6 +183,30 @@ damage or let them block a build:
   an *older* engine) reports any, it holds the same tape moment twice (a divergent copy stitched in
   redundantly). That is a *merge* artifact, not a tape problem: **re-build with the current engine** (the
   merge now de-duplicates) — re-capturing won't change it.
+
+## Auditing an existing master with `verify`
+
+`tapeflow verify <master.m2t>` audits ONE already-built master **from the file alone** — no working dir
+and no source captures — and is **strictly read-only** (nothing is written, so it is safe on a NAS /
+read-only volume). Use it to tag an untagged master, or to find masters that should be re-built. HDV
+only. It prints `tapeflow.verify/1`; act on these fields, **in this order**:
+
+- **`sound`** (bool) — a valid MPEG-TS with the Sony AUX timecode intact at both ends. `false` ⇒ the
+  file is broken or not a real HDV master: stop, flag it, ignore the rest.
+- **`duplicateFrames[]`** — tape moments emitted more than once (`{tc, rec, copies}`). Non-empty ⇒ the
+  master carries redundant frames (built by an older engine). **Fix by re-building** with the current
+  engine — *not* by re-capturing (a duplicate is a merge artifact, not a tape problem).
+- **`archive.tag`** + **`complete`** — the self-assessed completeness. Stamp `archive.tag` onto the
+  filename to label an untagged master (the same `<name> <tag>.m2t` rule as Build). `complete: false`
+  (or a sub-100% tag) ⇒ genuinely missing footage, which `verify` alone can't fix — that needs the
+  **source captures** re-merged (`analyze`/`build`), and maybe more re-capture.
+- **`summary`** / **`damage[]`** — where and how much is incomplete (for the human report).
+
+Keep two things straight: **a duplicate ⇒ re-build; an incomplete tag ⇒ go back to the sources** — never
+re-capture over a duplicate. And the self-assessed tag is a *lower bound*: a true 100% master reads
+100%, but one that carries real damage can read slightly low (with no sibling capture present, ffmpeg's
+cascaded decode errors can't be discredited against a clean twin) — for the authoritative best tag,
+`analyze` the source dir.
 
 ## Automatic re-capture with tapecap (optional)
 
