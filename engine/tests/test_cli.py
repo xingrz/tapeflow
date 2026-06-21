@@ -54,10 +54,10 @@ class TestCli(unittest.TestCase):
         self.assertEqual(out, "")
         self.assertIn("error:", err)
 
-    def test_verify_rejects_dv(self):
+    def test_verify_rejects_unknown_ext(self):
         d = tempfile.mkdtemp()
-        _touch(d, "x.dv")                             # verify is HDV-only; a DV file is a user error
-        code, _, err = _run(["verify", os.path.join(d, "x.dv")])
+        _touch(d, "x.txt")                            # verify routes .m2t/.ts (HDV) and .dv; else error
+        code, _, err = _run(["verify", os.path.join(d, "x.txt")])
         self.assertEqual(code, 2)
         self.assertIn("error:", err)
 

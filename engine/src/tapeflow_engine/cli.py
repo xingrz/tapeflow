@@ -55,7 +55,7 @@ def main(argv=None, out=None, err=None):
     p_ve = sub.add_parser("verify",
                           help="audit one already-built master from the file alone (READ-ONLY): its "
                                "TF tag + any duplicate frames")
-    p_ve.add_argument("file", help="path to a built master file (.m2t/.ts/…)")
+    p_ve.add_argument("file", help="path to a built master file (.m2t/.ts/… HDV, or .dv)")
     p_bu = sub.add_parser("build",
                           help="export the merged file (byte-for-byte hdvmerge/dvmerge)")
     p_bu.add_argument("dir", help="working directory of captures")

@@ -7,6 +7,7 @@ caches live under ``<dir>/.tapeflow/`` so the working dir stays clean.
 
 import os
 import shutil
+import tempfile
 
 from . import _bootstrap, normalize
 
@@ -57,24 +58,25 @@ def analyze(params, notify=None):
 
 def verify(params, notify=None):
     """``{"file": ...}`` -> ``tapeflow.verify/1``: audit ONE already-built master from the file alone —
-    its self-assessed completeness (the same ``archive`` "TF tag" a build stamps) and any duplicate
-    frames. **Strictly read-only**: the file is indexed in memory with ``use_cache=False`` (no
-    ``.tapeflow`` cache, no temp files), so it is safe against a master on a read-only / NAS volume.
+    its self-assessed completeness (the same ``archive`` "TF tag" a build stamps) and, for HDV, any
+    duplicate frames. **Read-only w.r.t. the master**: nothing is written beside it (HDV indexes in
+    memory; DV sends dvrescue's temps to system scratch and cleans them up), so it is safe on a
+    read-only / NAS volume.
 
-    The tag is computed by re-running the merge analysis on the single file: a truly complete master
-    re-reads as 100% (the build re-phases CC continuous, so seams carry no break; gaps/residuals are
-    detected from the file's own tc/rec and damage flags). A master that genuinely carries residual
-    damage may read slightly under its original tag — with no other capture present, ffmpeg's cascaded
-    decode errors can't be discredited against a clean twin — but a 100% master is unaffected."""
+    HDV: the tag re-runs the merge analysis on the single file in memory (no cache). DV: dvrescue's CSV
+    log is a *merge* artifact, so the tag re-runs dvrescue's merge on the one file with its temps in
+    scratch — this reproduces the exact ``analyze`` tag, at the cost of a full-size scratch copy
+    (guarded by a free-space check). Either way a truly complete master reads its full tag; one that
+    carries real residual damage may read slightly under it."""
     path = params.get("file")
     if not path or not os.path.isfile(path):
         raise ValueError("not a file: %r" % path)
     ext = os.path.splitext(path)[1].lower()
+    if ext in HDV_EXTS:
+        return _verify_hdv(path, notify)
     if ext in DV_EXTS:
-        raise ValueError("verify currently supports HDV masters only; got a DV file: %s" % path)
-    if ext not in HDV_EXTS:
-        raise ValueError("not a recognised master file (expected .m2t/.ts/…): %s" % path)
-    return _verify_hdv(path, notify)
+        return _verify_dv(path, notify)
+    raise ValueError("not a recognised master file (expected .m2t/.ts/… or .dv): %s" % path)
 
 
 def _verify_hdv(path, notify):
@@ -107,6 +109,47 @@ def _verify_hdv(path, notify):
         "sound": bool(sound),
         "tc": {"head": sinfo.get("tc_head"), "tail": sinfo.get("tc_tail")},
         "rec": {"head": sinfo.get("rec_head"), "tail": sinfo.get("rec_tail")},
+    }
+
+
+def _verify_dv(path, notify):
+    _bootstrap.ensure_engines_importable()
+    if not shutil.which("dvrescue"):
+        raise ValueError("DV verify needs the dvrescue binary on PATH "
+                         "(install MediaArea/MIPoPS dvrescue)")
+    from dvmerge import run as dvrun, jsonout as dvjson
+    # dvrescue's CSV merge log — the basis of the completeness tag — is a *merge* artifact, so the only
+    # way to reproduce the exact `analyze` tag for one master is to re-run the merge on it. That writes
+    # a full-size throwaway .dv. To stay read-only w.r.t. the master, send every temp to a fresh SCRATCH
+    # dir under the system temp (never beside the master) and remove it; guard on free space first
+    # (the scratch needs roughly the master's own size). `TMPDIR` points scratch at a larger volume.
+    scratch = tempfile.mkdtemp(prefix="tapeflow-verify-")
+    try:
+        need = os.path.getsize(path) + (256 << 20)        # the merged copy + small logs + margin
+        free = shutil.disk_usage(scratch).free
+        if free < need:
+            raise ValueError("not enough scratch space to verify this DV master: need ~%.1f GB free in "
+                             "%s, have %.1f GB (point $TMPDIR at a larger volume)"
+                             % (need / 2**30, tempfile.gettempdir(), free / 2**30))
+        if notify:
+            notify("progress", {"phase": "merging", "tool": "dvrescue"})
+        plan = dvrun.analyze([path], no_cache=True, tmp_dir=scratch)
+        dv = dvjson.analysis(plan)
+        directory = os.path.dirname(os.path.abspath(path))
+        stem = os.path.splitext(os.path.basename(path))[0]
+        norm = normalize.from_dvmerge(dv, directory, {stem: os.path.basename(path)})
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)        # belt-and-suspenders; dvmerge cleans its own
+    return {
+        "schema": "tapeflow.verify/1",
+        "format": "dv",
+        "file": os.path.basename(path),
+        "archive": norm.get("archive"),
+        "complete": norm.get("complete"),
+        "summary": norm.get("summary"),
+        "damage": norm.get("damage"),
+        "duplicateFrames": [],   # HDV-only (a hash-coverage merge artifact); dvrescue's DV merge has none
+        "sound": True,           # dvrescue parsed it to produce the log -> a readable DV stream
     }
 
 

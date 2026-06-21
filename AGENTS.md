@@ -95,9 +95,15 @@ tapeflow's build until the pin is deliberately bumped.
 - **`analyze` vs `verify` — two different questions.** `analyze <dir>` is the *best master these
   captures could build*: a frame with a clean copy in **some** capture counts clean (recoverable, so a
   cascaded ffmpeg decode error is discredited against the clean twin). `verify <file>` is *what one
-  already-built master is*, decoded as-is and **read-only** — a conservative lower bound (≤ `analyze`):
-  a complete master reads the same, but past a real residual a lone file has no twin to discredit those
-  cascaded errors against, so it counts them. (Distinct from `verify`: hdvmerge's `verify_build` is the
+  already-built master is*, **read-only w.r.t. the master**. For **HDV** it re-reads the lone file
+  in memory — a conservative lower bound (≤ `analyze`): a complete master reads the same, but past a
+  real residual a lone file has no twin to discredit cascaded ffmpeg errors against, so it counts them.
+  For **DV** verify re-runs dvrescue's *merge* on the one file — the CSV log a tag needs is a merge
+  artifact — with every temp (a full-size throwaway `.dv` + the logs) sent to **system scratch** and
+  removed, guarded by a free-space check (≈ the master's size; `TMPDIR` points it at a big volume).
+  That reproduces `analyze`'s tag *exactly* (same dvrescue path, no twin-discrediting in play), so DV
+  verify is not conservative — it just needs `dvrescue` + scratch where HDV needs neither.
+  (Distinct from `verify`: hdvmerge's `verify_build` is the
   build's *own* post-build self-check. It shares the plan-independent parts — duplicate detection and
   AUX/TS soundness, the same code — but its decode/CC check is *plan-aware* (it forgives decode errors
   the plan already explains), so it's exact where the standalone `verify` stays conservative. Both run

@@ -186,16 +186,21 @@ damage or let them block a build:
 
 ## Auditing an existing master with `verify`
 
-`tapeflow verify <master.m2t>` audits ONE already-built master **from the file alone** — no working dir
-and no source captures — and is **strictly read-only** (nothing is written, so it is safe on a NAS /
-read-only volume). Use it to tag an untagged master, or to find masters that should be re-built. HDV
-only. It prints `tapeflow.verify/1`; act on these fields, **in this order**:
+`tapeflow verify <master>` audits ONE already-built master **from the file alone** — no working dir and
+no source captures — for both formats (HDV `.m2t`/`.ts` or DV `.dv`). It is **read-only w.r.t. the
+master** (nothing is written beside it, so it is safe on a NAS / read-only volume): HDV reads the file
+in memory; **DV** needs `dvrescue` and re-runs its merge with all temps in **system scratch** (a
+full-size throwaway copy — guard is automatic; point `TMPDIR` at a volume with ≈ the master's size
+free). Use it to tag an untagged master, or to find masters that should be re-built. It prints
+`tapeflow.verify/1`; act on these fields, **in this order**:
 
-- **`sound`** (bool) — a valid MPEG-TS with the Sony AUX timecode intact at both ends. `false` ⇒ the
-  file is broken or not a real HDV master: stop, flag it, ignore the rest.
-- **`duplicateFrames[]`** — tape moments emitted more than once (`{tc, rec, copies}`). Non-empty ⇒ the
-  master carries redundant frames (built by an older engine). **Fix by re-building** with the current
-  engine — *not* by re-capturing (a duplicate is a merge artifact, not a tape problem).
+- **`sound`** (bool) — the stream parsed as a real master (HDV: valid MPEG-TS with Sony AUX timecode
+  intact at both ends; DV: dvrescue read it). `false` ⇒ the file is broken or not a real master: stop,
+  flag it, ignore the rest.
+- **`duplicateFrames[]`** (HDV only; always empty for DV) — tape moments emitted more than once
+  (`{tc, rec, copies}`). Non-empty ⇒ the master carries redundant frames (built by an older engine).
+  **Fix by re-building** with the current engine — *not* by re-capturing (a duplicate is a merge
+  artifact, not a tape problem).
 - **`archive.tag`** + **`complete`** — the self-assessed completeness. Stamp `archive.tag` onto the
   filename to label an untagged master (the same `<name> <tag>.m2t` rule as Build). `complete: false`
   (or a sub-100% tag) ⇒ genuinely missing footage, which `verify` alone can't fix — that needs the
@@ -205,10 +210,11 @@ only. It prints `tapeflow.verify/1`; act on these fields, **in this order**:
 Keep two things straight: **a duplicate ⇒ re-build; an incomplete tag ⇒ go back to the sources** — never
 re-capture over a duplicate. And `verify` and `analyze` answer **different questions**: `analyze` is the
 *best a master could be* from the captures (a recoverable frame — clean in some copy — counts clean);
-`verify` is *what this one file already is*, decoded as-is, so it's a conservative **lower bound** (≤
-`analyze`). A true 100% master reads 100% either way; only *past a real damaged spot* can `verify` read a
-touch low — a lone file has no clean twin to discredit ffmpeg's cascaded decode errors against — so for
-the best achievable tag, `analyze` the source dir.
+`verify` is *what this one file already is*. For **HDV** that's a conservative **lower bound** (≤
+`analyze`): a true 100% master reads 100%, but *past a real damaged spot* it can read a touch low — a
+lone file has no clean twin to discredit ffmpeg's cascaded decode errors against, so `analyze` the
+source dir for the best achievable tag. For **DV** there is no such gap: verify re-runs dvrescue's own
+merge, so its tag matches `analyze` exactly.
 
 ## Automatic re-capture with tapecap (optional)
 
