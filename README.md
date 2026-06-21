@@ -72,20 +72,25 @@ your PATH:
 ## Agent skill
 
 Prefer to let an AI coding assistant do the bookkeeping for you? TapeFlow ships a thin one-shot CLI
-(`tapeflow analyze <dir>` / `tapeflow build <dir> <out>`) over the same engines the app uses, plus an
-installable [skill](skills/tapeflow/SKILL.md). Install it into your agent (Claude Code, etc.):
+(`tapeflow analyze <dir>` / `tapeflow build <dir> <out>` / `tapeflow verify <master>`) over the same
+engines the app uses, plus an installable [skill](skills/tapeflow/SKILL.md). Install it into your agent
+(Claude Code, etc.):
 
 ```sh
 npx skills add xingrz/tapeflow
 ```
 
 The installed TapeFlow app bundles this CLI, so once you've installed TapeFlow (above) the skill
-locates it automatically — no separate CLI install needed.
+locates it automatically — no separate CLI install needed. For a headless box without the app — a NAS
+or server that just has Python — grab the standalone `tapeflow-<version>.pyz` from
+[Releases](https://github.com/xingrz/tapeflow/releases) and run it with any `python3` (≥ 3.7), e.g.
+`python3 tapeflow-<version>.pyz verify <master>`.
 
 It teaches the agent to check whether a folder of captures adds up to a complete tape, report exactly
-which spots still need re-capturing, and export the merged file. Where the companion
-[tapecap](https://github.com/xingrz/tapecap) skill is also installed (raw DV/HDV capture over
-FireWire on macOS ≤ 15), it can even drive the deck and re-capture those spots for you.
+which spots still need re-capturing, export the merged file, and audit or re-tag an already-exported
+master. Where the companion [tapecap](https://github.com/xingrz/tapecap) skill is also installed (raw
+DV/HDV capture over FireWire on macOS ≤ 15), it can even drive the deck and re-capture those spots for
+you.
 
 ## Built on
 
