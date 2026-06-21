@@ -1,6 +1,7 @@
 [project]
 name = "tapeflow-engine"
-version = "1.0.0"
+# Single source of truth: tapeflow_engine.__version__ (kept in lock-step with app/package.json).
+dynamic = ["version"]
 description = "tapeflow's Python sidecar: route DV/HDV captures to the merge engines and serve a unified JSON-RPC analysis over stdio"
 requires-python = ">=3.11"
 # The merge engines are provided as git submodules under ../engines and made importable either by
@@ -17,6 +18,9 @@ tapeflow = "tapeflow_engine.cli:main"
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools.dynamic]
+version = { attr = "tapeflow_engine.__version__" }
 
 [tool.setuptools.packages.find]
 where = ["src"]

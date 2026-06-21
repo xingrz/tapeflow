@@ -7,7 +7,11 @@ that the Electron UI renders without caring which format it came from. It speaks
 as newline-delimited JSON over stdio (see :mod:`tapeflow_engine.rpc`).
 """
 
-__version__ = "1.0.3"
+# One product version across the app, this engine, and its CLI — kept in lock-step with
+# app/package.json (see AGENTS.md "Dev workflow"). pyproject reads this value, so it's the single
+# engine version source. The bundled hdvmerge/dvmerge keep their own upstream versions; the wire
+# contract is versioned separately as ``tapeflow.analysis/N`` below.
+__version__ = "1.6.2"
 
 # The unified contract between the sidecar and the renderer. Versioned: reshaping it is a breaking
 # change across the process boundary, so bump to /2 rather than silently changing fields.

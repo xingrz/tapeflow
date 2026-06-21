@@ -285,10 +285,19 @@ It is a polyglot monorepo, but needs no monorepo tool — `app/` has its own `pa
   submodules editable into the sidecar's venv (`pip install -e engines/hdvmerge engines/dvmerge`);
   for release, PyInstaller freezes them in. Either way the engines are imported as libraries — the
   submodule is just *where the source lives, pinned*.
-- **Bump an engine version** (after pushing the engine upstream): `git -C engines/<name> fetch &&
-  git -C engines/<name> checkout <commit>`, then `git add engines/<name>` and commit the new pin.
+- **Bump an engine submodule pin** (after pushing the engine upstream): `git -C engines/<name> fetch
+  && git -C engines/<name> checkout <commit>`, then `git add engines/<name>` and commit the new pin.
+  This is the hdvmerge/dvmerge *pin*, not the product version below.
 - **Engine work happens in the standalone repos** (`~/Projects/hdvmerge`, `~/Projects/dvmerge`),
   not inside the submodule copies; tapeflow only adopts pinned versions.
+- **Cut a release** — one product version spans the app, this engine, and its CLI. Bump
+  `app/package.json` *and* `engine/src/tapeflow_engine/__init__.py` (`__version__`) to the same
+  `X.Y.Z` in one commit; `engine/pyproject.toml` reads `__version__`, so that file is the single
+  engine version source — don't hard-code a version there. Then tag `vX.Y.Z` and push the tag (CI's
+  `release` job builds every platform installer and drafts the GitHub release). The bundled
+  hdvmerge/dvmerge keep their own upstream versions (pinned above); the wire contract is versioned
+  separately as `tapeflow.analysis/N`. After the release assets exist, bump the Homebrew cask:
+  `gh workflow run bump.yml -R xingrz/homebrew-tap -f project=tapeflow`.
 - **Run the app in dev**: `cd app && npm install && npm run dev`. Electron main spawns the sidecar as
   `python3 -m tapeflow_engine` (cwd = repo root, `PYTHONPATH=engine/src`); the engines load from the
   pinned submodules via `_bootstrap`, so no pip install is needed. Needs `python3` on PATH; override
