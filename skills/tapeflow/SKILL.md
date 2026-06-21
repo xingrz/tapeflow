@@ -156,20 +156,26 @@ Always use `tc`/`rec` to describe *where* a spot is — they are frame-accurate 
 field is an opaque per-engine integer for relative ordering only; never compute positions or
 durations from it.
 
-**Not every reported figure is damage.** The only "is the tape still damaged?" signals are
-**`complete`** and **`damage[]`** (counted by `summary.recaptureSpots`). Two HDV-only fields look
-alarming but are **not** damage and **never** call for re-capturing — don't report them to the user as
-remaining problems or let them block a build:
+**Not every reported figure is a re-capture target.** The only "is the tape still damaged?" signals
+are **`complete`** and **`damage[]`** (counted by `summary.recaptureSpots`). A few HDV-only fields look
+alarming but are **not** `damage[]` and don't call for re-capturing — don't report them as remaining
+damage or let them block a build:
 
-- **`divergences[]`** — spots where two otherwise-*clean* copies differ byte-for-byte (typically a deck
-  re-locking differently at a record-pause seam). Review-only: the merge already picked one copy, and a
-  divergence never enters `damage[]`, never lowers `complete`, and is not a re-capture target.
+- **`divergences[]`** — spots where two otherwise-*clean* copies of one frame differ byte-for-byte (the
+  tape read that frame differently on different passes; e.g. a deck re-locking at a record-pause seam).
+  The merge keeps one (the version the most copies agree on, else the one in the longest clean run) and
+  emits it once; a divergence never enters `damage[]`, lowers `complete`, or blocks a build, so it is
+  not a re-capture target. (Optional: to *confirm* which version is the true frame, capture another
+  pass — once two passes agree, that consensus version wins.)
 - the built file's **`verify.seam_discontinuities`** — a count of timestamp (DTS) steps a demuxer sees
   at each splice. A byte-exact merge never rewrites PTS/DTS, so the DTS steps at every cross-capture
   join; this can affect some players' seeking but **not the picture**, and never fails the build. A
-  higher count just means more fragments were stitched together (e.g. after adding more re-captures) —
-  it is **not** more damage. Fewer captures that already reach `complete` give a cleaner (fewer-seam)
-  master with the *same* completeness.
+  higher count just means more fragments were stitched together — it is **not** more damage. Fewer
+  captures that already reach `complete` give a cleaner (fewer-seam) master with the *same* completeness.
+- the built file's **`verify.duplicate_frames`** — should be empty. If a master (typically one built by
+  an *older* engine) reports any, it holds the same tape moment twice (a divergent copy stitched in
+  redundantly). That is a *merge* artifact, not a tape problem: **re-build with the current engine** (the
+  merge now de-duplicates) — re-capturing won't change it.
 
 ## Automatic re-capture with tapecap (optional)
 
