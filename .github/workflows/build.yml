@@ -102,9 +102,42 @@ jobs:
             app/release/*.AppImage
             app/release/*.deb
 
-  # On a version tag, gather every platform's installers into a GitHub Release.
+  # The engine is pure Python, so the standalone CLI ships as one portable zipapp instead of
+  # per-platform frozen binaries: a single `tapeflow-<version>.pyz` that runs on any system's
+  # `python3` (>= 3.7) — no glibc/arch pitfalls (e.g. a frozen libpython needing a newer GLIBC than a
+  # NAS has). Built once, not per-OS.
+  cli:
+    name: cli (portable pyz)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - name: Build the portable CLI (zipapp)
+        shell: bash
+        run: |
+          VERSION=$(python -c "import json;print(json.load(open('app/package.json'))['version'])")
+          STAGE=pyzbuild/app
+          mkdir -p "$STAGE" cli-dist
+          cp -r engine/src/tapeflow_engine "$STAGE/"
+          cp -r engines/hdvmerge/src/hdvmerge "$STAGE/"
+          cp -r engines/dvmerge/src/dvmerge "$STAGE/"
+          printf 'from tapeflow_engine.cli import main\nmain()\n' > "$STAGE/__main__.py"
+          find "$STAGE" -name __pycache__ -type d -prune -exec rm -rf {} + || true
+          python -m zipapp "$STAGE" -o "cli-dist/tapeflow-${VERSION}.pyz" -p "/usr/bin/env python3"
+          python "cli-dist/tapeflow-${VERSION}.pyz" --version
+          python "cli-dist/tapeflow-${VERSION}.pyz" --compact capabilities | head -c 200; echo
+      - uses: actions/upload-artifact@v7
+        with:
+          name: tapeflow-cli-pyz
+          path: cli-dist/*.pyz
+
+  # On a version tag, gather every platform's installers (and the portable CLI) into a GitHub Release.
   release:
-    needs: build
+    needs: [build, cli]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
