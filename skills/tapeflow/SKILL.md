@@ -211,8 +211,18 @@ no source captures — for both formats (HDV `.m2t`/`.ts` or DV `.dv`). It is **
 master** (nothing is written beside it, so it is safe on a NAS / read-only volume): HDV reads the file
 in memory; **DV** needs `dvrescue` and re-runs its merge with all temps in **system scratch** (a
 full-size throwaway copy — guard is automatic; point `TMPDIR` at a volume with ≈ the master's size
-free). Use it to tag an untagged master, or to find masters that should be re-built. It prints
-`tapeflow.verify/1`; act on these fields, **in this order**:
+free). Use it to tag an untagged master, or to find masters that should be re-built.
+
+**Only reach for `verify` when the source captures aren't in front of you.** In the normal `analyze` →
+`build` flow, the *build's own* `verify` summary (the `BuildResult.verify` block — CC/TEI, decode,
+`decode_error_spots`) is the authoritative, plan-aware post-build check; act on **that**. Do **not** run
+`verify <file>` to "double-check" or "be safe about" a master you just built with its captures present:
+being plan-less it is a *conservative lower bound* that reads **worse** than the build's own check (more
+spots, lower tag — never higher), so it will only mislead you into thinking a good build is damaged, and
+it re-decodes the whole file for nothing. `verify` is for a master seen **alone** — a NAS audit, an
+untagged file, a master whose working dir is gone.
+
+It prints `tapeflow.verify/1`; act on these fields, **in this order**:
 
 - **`sound`** (bool) — the stream parsed as a real master (HDV: valid MPEG-TS with Sony AUX timecode
   intact at both ends; DV: dvrescue read it). `false` ⇒ the file is broken or not a real master: stop,
