@@ -241,7 +241,11 @@ thousands of GOPs/frames — SVG/DOM would choke; Canvas pans/zooms smoothly).
   → `BuildResult`. For HDV it carries a `verify` summary (AUX survived, CC/TEI integrity, decode) —
   surface it as a green check, or a warning when a knowingly-damaged merge is exported; DV has no
   separate self-check (`verify: null`). This is built as `BuildPanel.vue` — pick destination →
-  build with a real progress bar → surface the verify summary.
+  build with a real progress bar → surface the verify summary. The verify's **`decodeErrorSpots`**
+  (damage that only surfaces at final decode) are synthesised into the damage list as `kind: 'decode'`
+  spots, so they get the same cards / map markers / accept-undo as analysis damage — and are persisted
+  in `state.json` bound to the last export (the store re-merges them on each `analyze`, so they survive
+  a re-analyse and clear only when the next export decodes clean).
 
 The renderer realises this intent: dark-themed, internationalised (Auto / English / 简体中文), and
 bound to the `tapeflow.analysis/1` contract. What remains is refinement on a working app, not a

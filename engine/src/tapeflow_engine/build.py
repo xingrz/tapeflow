@@ -66,6 +66,11 @@ def _build_hdv(directory, files, output, notify):
             "decodeErrors": info.get("decode_errors"),
             "unexplainedDecode": info.get("unexplained_decode"),
             "decodeGate": info.get("decode_gate"),
+            # WHERE the master still decodes badly: located, cause-classified spots [{frame,tc,rec,kind,
+            # count}] (kind: residual | stitch | transport | unexplained). Lets the UI mark them on the
+            # result bar and the user target a re-capture there; `residual`/`stitch` may clear with
+            # another pass, `unexplained` is a real concern. Empty on a clean decode.
+            "decodeErrorSpots": info.get("decode_error_spots", []),
             # demuxer timestamp discontinuities at byte-exact splices — not content damage, surfaced
             # so the UI can reassure rather than warn (affects only some players' seeking)
             "seamDiscontinuities": info.get("seam_discontinuities"),

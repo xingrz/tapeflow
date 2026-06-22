@@ -85,7 +85,8 @@ watch(
 )
 
 watch(
-  [width, viewMin, viewMax, lanesHeight, focusedCaptureTag, () => props.selectedKey, () => props.damageViews],
+  [width, viewMin, viewMax, lanesHeight, focusedCaptureTag, () => props.selectedKey,
+   () => props.damageViews],
   () => void nextTick(draw),
   { deep: true }
 )
@@ -313,6 +314,7 @@ function readMapColors() {
     missing: v('--map-missing'),
     missingStripe: v('--map-missing-stripe'),
     residual: v('--map-residual'),
+    decode: v('--map-decode'),
     selectFill: v('--map-select-fill'),
     selectEdge: v('--map-select-edge'),
     selectBox: v('--map-select-box')
@@ -840,6 +842,11 @@ function drawDamageRegion(
       roundedRect(ctx, piece.x, y, piece.w, h, 2)
       ctx.fill()
       drawStripes(ctx, piece.x, y, piece.w, h, colors.missingStripe)
+    } else if (spot.kind === 'decode') {
+      // only surfaces at final decode — distinct colour so it reads apart from per-capture damage
+      ctx.fillStyle = colors.decode
+      roundedRect(ctx, piece.x, y, piece.w, h, 2)
+      ctx.fill()
     } else {
       ctx.fillStyle = colors.residual
       roundedRect(ctx, piece.x, y, piece.w, h, 2)

@@ -5,6 +5,7 @@ import type {
   Capabilities,
   ChecklistState,
   DamageSpot,
+  DecodeErrorSpot,
   Progress,
   TapeAnalysis,
   WorkspaceCapture
@@ -18,6 +19,7 @@ import {
   statusForSpot
 } from '../utils/analysis'
 import { formatDurationFrames, formatProgress } from '../utils/format'
+import { tcToSeconds } from '../utils/timecode'
 import { t } from '../i18n'
 
 export interface DamageView {
@@ -59,6 +61,10 @@ export const useWorkflowStore = defineStore('workflow', () => {
   const building = ref(false)
   const buildProgress = ref<number | null>(null) // 0..1, or null = indeterminate (verifying)
   const buildResult = ref<BuildResult | null>(null)
+  // WHERE the LAST export still decoded badly (HDV verify). Persisted in state.json and bound to the
+  // export, NOT the analysis: it survives a re-analyse and is only rewritten by the next export (when
+  // ffmpeg either still trips there or no longer does). The result-bar markers read from this.
+  const decodeSpots = ref<DecodeErrorSpot[]>([])
   const selectedDamageKey = ref<string | null>(null)
   const ingestMessage = ref('')
   const workspaceCaptures = ref<WorkspaceCapture[]>([])
@@ -328,7 +334,8 @@ export const useWorkflowStore = defineStore('workflow', () => {
       const onDisk = new Map(
         (await window.api.listCaptures(dir.value)).map((item) => [item.file, item])
       )
-      const sortedResult = sortAnalysisCaptures(result, onDisk)
+      // merge the last export's decode spots in BEFORE reconcile, so they're tracked like any damage
+      const sortedResult = withDecodeDamage(sortAnalysisCaptures(result, onDisk), decodeSpots.value)
       analysis.value = sortedResult
       workspaceCaptures.value = result.captures.map((capture) => ({
         file: capture.file,
@@ -369,6 +376,15 @@ export const useWorkflowStore = defineStore('workflow', () => {
     progress.value = t('progress.exporting')
     try {
       buildResult.value = await window.api.build(dir.value, output)
+      // This export (re)defines the persistent decode spots: overwrite them (HDV verify locates them; a
+      // clean export or DV clears them) and merge into the current analysis so they appear as damage
+      // cards/markers right away and survive a later re-analyse. Persist alongside the checklist.
+      decodeSpots.value = buildResult.value?.verify?.decodeErrorSpots ?? []
+      if (analysis.value) {
+        analysis.value = withDecodeDamage(analysis.value, decodeSpots.value)
+        checklist.value = reconcileChecklist(checklist.value, analysis.value)
+      }
+      await saveChecklist()
     } catch (e) {
       error.value = toMessage(e)
     } finally {
@@ -436,13 +452,19 @@ export const useWorkflowStore = defineStore('workflow', () => {
   async function loadChecklist(): Promise<void> {
     if (!dir.value) {
       checklist.value = emptyChecklist()
+      decodeSpots.value = []
       return
     }
     try {
-      checklist.value = await window.api.loadState(dir.value)
+      // state.json carries the checklist plus the last export's decode-error spots alongside it; older
+      // files predate the field and simply restore none.
+      const { decodeSpots: saved, ...rest } = await window.api.loadState(dir.value)
+      checklist.value = rest as ChecklistState
+      decodeSpots.value = Array.isArray(saved) ? saved : []
     } catch (e) {
       error.value = toMessage(e)
       checklist.value = emptyChecklist()
+      decodeSpots.value = []
     }
   }
 
@@ -464,7 +486,13 @@ export const useWorkflowStore = defineStore('workflow', () => {
 
   async function saveChecklist(): Promise<void> {
     if (!dir.value) return
-    await window.api.saveState(dir.value, plainChecklist(checklist.value))
+    // Both halves must be plain objects: a Vue reactive proxy can't cross the IPC structured-clone
+    // boundary ("An object could not be cloned"). plainChecklist already deep-copies the checklist;
+    // decodeSpots needs the same.
+    await window.api.saveState(dir.value, {
+      ...plainChecklist(checklist.value),
+      decodeSpots: JSON.parse(JSON.stringify(decodeSpots.value)) as DecodeErrorSpot[]
+    })
   }
 
   function selectFirstActionable(): void {
@@ -549,6 +577,7 @@ export const useWorkflowStore = defineStore('workflow', () => {
     building,
     buildProgress,
     buildResult,
+    decodeSpots,
     selectedDamageKey,
     selectedDamage,
     workspaceCaptures,
@@ -585,6 +614,51 @@ function toMessage(e: unknown): string {
 
 function plainChecklist(state: ChecklistState): ChecklistState {
   return JSON.parse(JSON.stringify(state)) as ChecklistState
+}
+
+// Synthesise a last-export decode-error spot into a DamageSpot so it is treated exactly like analysis
+// damage (card, thumbnail, selection, accept/undo, map) — decode damage only surfaces at final decode
+// but is, in effect, a place that may need another capture pass.
+function decodeToDamage(spot: DecodeErrorSpot, analysis: TapeAnalysis): DamageSpot {
+  const at = tcToSeconds(spot.tc, analysis.fps)
+  const covering = analysis.captures.filter((c) => {
+    const s = tcToSeconds(c.tcSpan[0], analysis.fps)
+    const e = tcToSeconds(c.tcSpan[1], analysis.fps)
+    return at != null && s != null && e != null && at >= s && at <= e
+  })
+  // place it on the engine's OWN axis (interpolated through a covering capture) so it sorts and lays
+  // out alongside real damage instead of on a different scale
+  const host = covering[0]
+  let pos = at ?? 0
+  if (host) {
+    const t0 = tcToSeconds(host.tcSpan[0], analysis.fps)
+    const t1 = tcToSeconds(host.tcSpan[1], analysis.fps)
+    pos =
+      at != null && t0 != null && t1 != null && t1 > t0
+        ? host.axis[0] + Math.min(1, Math.max(0, (at - t0) / (t1 - t0))) * (host.axis[1] - host.axis[0])
+        : host.axis[0]
+  }
+  return {
+    id: `decode:${spot.frame}`,
+    kind: 'decode',
+    axis: [pos, pos],
+    tcStart: spot.tc,
+    tcEnd: spot.tc,
+    recStart: spot.rec,
+    recEnd: spot.rec,
+    durationFrames: spot.count,
+    coverage: covering.map((c) => c.tag),
+    copies: covering.length,
+    severity: spot.kind, // sub-kind (residual/stitch/transport/unexplained); the card localises it
+    runs: []
+  }
+}
+
+// analysis with the persisted decode spots merged into its damage. Idempotent: any prior synthesised
+// decode is dropped first, so re-merging after a new export (or a re-analyse) just rebuilds them.
+function withDecodeDamage(analysis: TapeAnalysis, decode: DecodeErrorSpot[]): TapeAnalysis {
+  const base = analysis.damage.filter((d) => d.kind !== 'decode')
+  return { ...analysis, damage: [...base, ...decode.map((s) => decodeToDamage(s, analysis))] }
 }
 
 function compareWorkspaceCaptures(a: WorkspaceCapture, b: WorkspaceCapture): number {

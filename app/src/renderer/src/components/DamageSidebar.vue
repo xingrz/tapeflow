@@ -15,6 +15,17 @@ const props = defineProps<{
   selectedKey: string | null
 }>()
 
+// A 'decode' spot carries its sub-kind (residual/stitch/transport/unexplained) in `severity`; localise
+// it plus the right next step. Other kinds use the engine's own severity text.
+function severityText(view: DamageView): string {
+  if (view.spot.kind === 'decode') {
+    const sub = view.spot.severity
+    const step = sub === 'unexplained' ? 'investigate' : 'recapture'
+    return `${t('verify.spotKind.' + sub)} · ${t('verify.spotHint.' + step)}`
+  }
+  return view.spot.severity || t('recapture.damage')
+}
+
 const emit = defineEmits<{
   select: [key: string]
   accept: [view: DamageView, accepted: boolean]
@@ -93,7 +104,8 @@ function scrollSelectedIntoView(): void {
         :class="{
           selected: selectedKey === view.key,
           accepted: view.status === 'accepted',
-          missing: view.spot.kind === 'missing'
+          missing: view.spot.kind === 'missing',
+          decode: view.spot.kind === 'decode'
         }"
         @click="emit('select', view.key)"
       >
@@ -132,7 +144,7 @@ function scrollSelectedIntoView(): void {
             <span>{{ formatDurationFrames(view.spot.durationFrames, analysis?.fps ?? 25) }}</span>
             <span>{{ coverageLabel(view) }}</span>
           </div>
-          <div class="severity-line">{{ view.spot.severity || $t('recapture.damage') }}</div>
+          <div class="severity-line">{{ severityText(view) }}</div>
         </div>
       </article>
     </div>

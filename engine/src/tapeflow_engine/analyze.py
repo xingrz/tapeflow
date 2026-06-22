@@ -97,6 +97,10 @@ def _verify_hdv(path, notify):
     directory = os.path.dirname(os.path.abspath(path))
     norm = normalize.from_hdvmerge(hdv, directory, {idx.tag: os.path.basename(path)})
     sound, sinfo = hverify.verify(path)
+    # Decode the master and locate where it still decodes badly, classified against its OWN single-source
+    # plan. Conservative: with no build plan to name a divergence cut, such a glitch reads as
+    # `unexplained` here (cf. `verify_build`, which knows the stitch points). {} when ffmpeg is absent.
+    dec = hverify.decode_scan(path, idx, plan)
     return {
         "schema": "tapeflow.verify/1",
         "format": "hdv",
@@ -106,6 +110,9 @@ def _verify_hdv(path, notify):
         "summary": norm.get("summary"),
         "damage": norm.get("damage"),
         "duplicateFrames": hverify._duplicate_frames(idx.gops),
+        "decodeErrorSpots": dec.get("decode_error_spots", []),
+        "decodeErrors": dec.get("decode_errors"),
+        "seamDiscontinuities": dec.get("seam_discontinuities"),
         "sound": bool(sound),
         "tc": {"head": sinfo.get("tc_head"), "tail": sinfo.get("tc_tail")},
         "rec": {"head": sinfo.get("rec_head"), "tail": sinfo.get("rec_tail")},
@@ -149,6 +156,9 @@ def _verify_dv(path, notify):
         "summary": norm.get("summary"),
         "damage": norm.get("damage"),
         "duplicateFrames": [],   # HDV-only (a hash-coverage merge artifact); dvrescue's DV merge has none
+        "decodeErrorSpots": [],  # HDV-only (an ffmpeg decode concept); DV damage is in `damage` above
+        "decodeErrors": None,
+        "seamDiscontinuities": None,
         "sound": True,           # dvrescue parsed it to produce the log -> a readable DV stream
     }
 

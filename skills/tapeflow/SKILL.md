@@ -127,7 +127,10 @@ clean `error: …` line on stderr — not a traceback.
      only the top level and skips subdirectories, so a subdir is safe.)
 
    For HDV the result carries a `verify` summary (AUX/timecode survived, CC/TEI integrity, decode
-   check); DV has `verify: null` (the merge and its metadata are dvrescue's).
+   check); DV has `verify: null` (the merge and its metadata are dvrescue's). **After an HDV build,
+   inspect `verify.decode_error_spots`** — `residual`/`stitch` entries are extra re-capture targets that
+   only surface at decode (see *What counts as a re-capture target* below): re-capture each spot's `tc`,
+   re-export, and confirm it cleared. A clean tape can pass `analyze` yet still reveal one here.
 
 You can export a knowingly-incomplete tape as long as `buildable` is `true` (HDV refuses only on
 non-tape-adjacent seams); `complete` just tells you whether any damage remains.
@@ -163,10 +166,24 @@ Always use `tc`/`rec` to describe *where* a spot is — they are frame-accurate 
 field is an opaque per-engine integer for relative ordering only; never compute positions or
 durations from it.
 
-**Not every reported figure is a re-capture target.** The only "is the tape still damaged?" signals
-are **`complete`** and **`damage[]`** (counted by `summary.recaptureSpots`). A few HDV-only fields look
-alarming but are **not** `damage[]` and don't call for re-capturing — don't report them as remaining
-damage or let them block a build:
+**What counts as a re-capture target.** Two signals say a tape still needs another pass — treat them the
+same way, both driven by a spot's **`tc`**:
+
+- **`damage[]`** from `analyze` (counted by `summary.recaptureSpots`) — the damage known *before* export
+  (`dirty` = covered but every copy damaged; `missing` = no copy at all).
+- the built file's **`verify.decode_error_spots[]`** — damage that surfaces only when the finished master
+  is **decoded** (HDV; empty for DV). Each `{frame, tc, rec, kind, count}`. `kind` is `residual`
+  (intra-frame damage no capture had clean), `stitch` (a fresh-start island edge — a real gap or a
+  divergence cut), `transport` (a TS break), or `unexplained` (a decode error on content nothing in the
+  plan explains). **`residual`/`stitch` ⇒ re-capture that `tc`** (a clean copy, or a pass that resolves
+  the divergence), re-export, and confirm the spot cleared — the exact same loop as `damage[]`, just
+  driven by the decode check. **`unexplained` ⇒ flag it** (it may be real damage no pass can fix, or a
+  benign seam artifact — one re-capture at its `tc` tells which: if it clears it was recoverable, if not
+  leave it). **Always check this after a build:** independent of the tag, a `complete`/100% master can
+  still carry one (e.g. a divergence cut).
+
+**Some reported figures are NOT re-capture targets** — don't report them as remaining damage or let them
+block a build:
 
 - **`divergences[]`** — spots where two otherwise-*clean* copies of one frame differ byte-for-byte (the
   tape read that frame differently on different passes; e.g. a deck re-locking at a record-pause seam).
@@ -174,11 +191,14 @@ damage or let them block a build:
   emits it once; a divergence never enters `damage[]`, lowers `complete`, or blocks a build, so it is
   not a re-capture target. (Optional: to *confirm* which version is the true frame, capture another
   pass — once two passes agree, that consensus version wins.)
-- the built file's **`verify.seam_discontinuities`** — a count of timestamp (DTS) steps a demuxer sees
-  at each splice. A byte-exact merge never rewrites PTS/DTS, so the DTS steps at every cross-capture
-  join; this can affect some players' seeking but **not the picture**, and never fails the build. A
-  higher count just means more fragments were stitched together — it is **not** more damage. Fewer
-  captures that already reach `complete` give a cleaner (fewer-seam) master with the *same* completeness.
+- the built file's **`verify.seam_discontinuities`** — a count of timestamp (DTS) steps a demuxer sees.
+  A byte-exact merge never rewrites PTS/DTS, but overlapping HDV captures carry the **tape's own**
+  (identical) timestamps, so a cross-capture join is *usually continuous* — the count is **not** the
+  number of splices (a tape with 28 joins and 154 record-pauses showed just 6). The few that remain are
+  non-monotonic points in the tape's *own recorded* timestamps, preserved verbatim — not merge-induced,
+  and **not removable** by re-capture or a different merge (only a whole-stream PTS/DTS rewrite would
+  erase them, which the byte-exact merge deliberately never does). Cosmetic (some players' seeking),
+  never fails the build, **not** damage.
 - the built file's **`verify.duplicate_frames`** — should be empty. If a master (typically one built by
   an *older* engine) reports any, it holds the same tape moment twice (a divergent copy stitched in
   redundantly). That is a *merge* artifact, not a tape problem: **re-build with the current engine** (the
@@ -201,6 +221,11 @@ free). Use it to tag an untagged master, or to find masters that should be re-bu
   (`{tc, rec, copies}`). Non-empty ⇒ the master carries redundant frames (built by an older engine).
   **Fix by re-building** with the current engine — *not* by re-capturing (a duplicate is a merge
   artifact, not a tape problem).
+- **`decodeErrorSpots[]`** (HDV only; empty for DV) — WHERE the master still decodes badly, each
+  `{frame, tc, rec, kind, count}` (`kind`: `residual` / `stitch` / `transport` / `unexplained`). Same
+  field a build's `verify.decode_error_spots` carries — but standalone `verify` is *conservative*: with
+  no build plan to name a divergence cut, such a glitch reads as `unexplained` here (a build would call
+  it `stitch`). `residual`/`stitch` ⇒ try another capture at that `tc`; `unexplained` ⇒ investigate.
 - **`archive.tag`** + **`complete`** — the self-assessed completeness. Stamp `archive.tag` onto the
   filename to label an untagged master (the same `<name> <tag>.m2t` rule as Build). `complete: false`
   (or a sub-100% tag) ⇒ genuinely missing footage, which `verify` alone can't fix — that needs the
@@ -230,6 +255,11 @@ let the operator capture manually. When both are present, **follow the tapecap s
 capture, seek and transport command**; the steps below are only the orchestration tapeflow adds on
 top, with `analyze`'s `damage[]`/`tape` timecodes as the targets. Each pass writes a *new* file into
 `<dir>`; re-run `analyze` after every pass (only the new file is indexed, so it's fast).
+
+The same loop also clears a build's **`verify.decode_error_spots`** (`residual`/`stitch`) — capture each
+spot's `tc` the same way (wider than the point), but verify by **re-building** and re-checking
+`decode_error_spots`, not by `analyze` (these only show at decode). Same 3-attempt cap; an `unexplained`
+spot that doesn't clear in one pass, leave it.
 
 1. **Work one target loop at a time.** A **target** is one capture aim — a single `damage[]` spot, or
    a small group of tightly adjacent spots merged into one window (see the 2-minute hard cap below).

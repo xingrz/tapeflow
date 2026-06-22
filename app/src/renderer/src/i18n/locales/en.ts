@@ -69,7 +69,17 @@ export default {
     ccWarning: 'CC/TEI warning',
     decodeClean: 'decode clean',
     decodeErrors: '{count} decode errors',
-    seamDiscontinuities: '{count} seam timestamp breaks (content intact; some players may mis-seek)'
+    seamDiscontinuities: '{count} seam timestamp breaks (content intact; some players may mis-seek)',
+    spotKind: {
+      residual: 'intra-frame damage',
+      stitch: 'stitch point',
+      transport: 'transport break',
+      unexplained: 'unexplained'
+    },
+    spotHint: {
+      recapture: 're-capture',
+      investigate: 'investigate'
+    }
   },
   captures: {
     title: 'Captures',
@@ -138,7 +148,8 @@ export default {
   },
   kind: {
     dirty: 'dirty',
-    missing: 'missing'
+    missing: 'missing',
+    decode: 'decode'
   },
   thumb: {
     enlarge: 'Click to enlarge',

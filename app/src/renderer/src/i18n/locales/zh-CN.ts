@@ -69,7 +69,17 @@ export default {
     ccWarning: 'CC/TEI 警告',
     decodeClean: '解码正常',
     decodeErrors: '{count} 个解码错误',
-    seamDiscontinuities: '{count} 处接缝时间戳不连续（内容完好，仅个别播放器定位可能受影响）'
+    seamDiscontinuities: '{count} 处接缝时间戳不连续（内容完好，仅个别播放器定位可能受影响）',
+    spotKind: {
+      residual: '帧内损伤',
+      stitch: '拼接点',
+      transport: '传输断点',
+      unexplained: '原因不明'
+    },
+    spotHint: {
+      recapture: '可补采',
+      investigate: '需排查'
+    }
   },
   captures: {
     title: '采集',
@@ -138,7 +148,8 @@ export default {
   },
   kind: {
     dirty: '损坏',
-    missing: '缺失'
+    missing: '缺失',
+    decode: '解码'
   },
   thumb: {
     enlarge: '点击放大',

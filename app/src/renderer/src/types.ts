@@ -1,7 +1,9 @@
 // The unified contract the renderer binds to: tapeflow.analysis/1 (see AGENTS.md). The sidecar
 // produces this by normalising whichever engine ran; the UI never sees engine-specific shapes.
 
-export type DamageKind = 'dirty' | 'missing'
+// dirty/missing come from analysis; 'decode' is a UI-side spot synthesised from the last export's
+// verify (damage that only surfaces at final decode) and merged in so it's treated like any damage.
+export type DamageKind = 'dirty' | 'missing' | 'decode'
 
 export interface DamageSpot {
   id: string
@@ -157,6 +159,17 @@ export interface WorkspaceCapture {
   mtimeMs: number
 }
 
+// A spot where the exported master still decodes badly, located on the tape and classified by cause.
+// `residual`/`stitch` may clear with another capture pass there; `unexplained` is a real concern (an
+// error on content nothing in the plan explains); `transport` is a TS break.
+export interface DecodeErrorSpot {
+  frame: number
+  tc: string
+  rec: string | null
+  kind: 'residual' | 'stitch' | 'transport' | 'unexplained'
+  count: number
+}
+
 export interface BuildVerify {
   aux: boolean
   recHead: string | null
@@ -171,6 +184,9 @@ export interface BuildVerify {
   decodeErrors: number | null
   unexplainedDecode: number | null
   decodeGate: boolean | null
+  // WHERE the master still decodes badly, located + classified — so the result bar can mark them and
+  // the user can target a re-capture. Empty on a clean decode.
+  decodeErrorSpots: DecodeErrorSpot[]
   // demuxer timestamp discontinuities at byte-exact capture splices — not content damage; affects
   // only some players' seeking. Surfaced so a sound merge is explained rather than warned about.
   seamDiscontinuities: number | null
@@ -208,4 +224,11 @@ export interface ChecklistEntry {
 export interface ChecklistState {
   schema: 'tapeflow.state/1'
   entries: Record<string, ChecklistEntry>
+}
+
+// What `.tapeflow/state.json` actually holds: the checklist plus, alongside it, the last export's
+// decode-error spots (so the result-bar markers persist across a re-analyse). Older files predate the
+// field — it restores as none.
+export interface PersistedState extends ChecklistState {
+  decodeSpots?: DecodeErrorSpot[]
 }

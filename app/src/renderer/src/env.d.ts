@@ -3,7 +3,7 @@ import type {
   TapeAnalysis,
   Capabilities,
   BuildResult,
-  ChecklistState,
+  PersistedState,
   Thumbnail,
   WorkspaceCapture
 } from './types'
@@ -23,8 +23,8 @@ declare global {
       listCaptures: (dir: string) => Promise<WorkspaceCapture[]>
       // copy dropped capture files into the working dir; returns the copied basenames
       ingest: (dir: string, srcPaths: string[]) => Promise<string[]>
-      loadState: (dir: string) => Promise<ChecklistState>
-      saveState: (dir: string, state: ChecklistState) => Promise<void>
+      loadState: (dir: string) => Promise<PersistedState>
+      saveState: (dir: string, state: PersistedState) => Promise<void>
       onProgress: (cb: (p: unknown) => void) => () => void
     }
   }
