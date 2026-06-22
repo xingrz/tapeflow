@@ -11,7 +11,7 @@ as newline-delimited JSON over stdio (see :mod:`tapeflow_engine.rpc`).
 # app/package.json (see AGENTS.md "Dev workflow"). pyproject reads this value, so it's the single
 # engine version source. The bundled hdvmerge/dvmerge keep their own upstream versions; the wire
 # contract is versioned separately as ``tapeflow.analysis/N`` below.
-__version__ = "1.7.1"
+__version__ = "1.8.0"
 
 # The unified contract between the sidecar and the renderer. Versioned: reshaping it is a breaking
 # change across the process boundary, so bump to /2 rather than silently changing fields.
