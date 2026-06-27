@@ -37,9 +37,10 @@ export interface WorkspaceCaptureView extends WorkspaceCapture {
 
 // A file's stage in the preparation pipeline shown in the progress modal. A row appears only when
 // real work begins — a dropped file being 'copying', or a non-cached file's byte-level 'indexing' —
-// so pre-existing cache hits never get a row. DV indexing is one opaque dvrescue merge with no byte
-// progress, so it shows as an indeterminate 'merging' step.
-export type TaskStage = 'pending' | 'copying' | 'indexing' | 'merging' | 'done'
+// so pre-existing cache hits never get a row. After the byte scan, a non-cached file decodes through
+// ffmpeg ('decoding'); DV indexing is one opaque dvrescue merge with no byte progress, so it shows as
+// an indeterminate 'merging' step.
+export type TaskStage = 'pending' | 'copying' | 'indexing' | 'decoding' | 'merging' | 'done'
 
 export interface TaskView {
   file: string
@@ -48,6 +49,10 @@ export interface TaskView {
   bytesPerSec: number // 0 when unknown
   etaSec: number | null // null when unknown / indeterminate
   determinate: boolean
+  // when a stage is one of several sequential passes (scan then decode) these label it "(step/steps)";
+  // undefined / steps<=1 hides the counter
+  step?: number
+  steps?: number
 }
 
 export const useWorkflowStore = defineStore('workflow', () => {
@@ -59,7 +64,8 @@ export const useWorkflowStore = defineStore('workflow', () => {
   const error = ref('')
   const busy = ref(false)
   const building = ref(false)
-  const buildProgress = ref<number | null>(null) // 0..1, or null = indeterminate (verifying)
+  const buildProgress = ref<number | null>(null) // 0..1, or null = indeterminate (no total yet)
+  const buildLabel = ref('') // headline for the export bar: building / verifying · scan|decode (n/N)
   const buildResult = ref<BuildResult | null>(null)
   // WHERE the LAST export still decoded badly (HDV verify). Persisted in state.json and bound to the
   // export, NOT the analysis: it survives a re-analyse and is only rewritten by the next export (when
@@ -175,7 +181,14 @@ export const useWorkflowStore = defineStore('workflow', () => {
     }
   }
 
-  function setTaskBytes(file: string, stage: TaskStage, done: number, total: number): void {
+  function setTaskBytes(
+    file: string,
+    stage: TaskStage,
+    done: number,
+    total: number,
+    step?: number,
+    steps?: number
+  ): void {
     const sampleKey = `${stage}:${file}`
     const now = performance.now()
     const prev = taskSamples[sampleKey]
@@ -192,7 +205,40 @@ export const useWorkflowStore = defineStore('workflow', () => {
       progress: total > 0 ? Math.min(1, done / total) : 0,
       bytesPerSec: Math.max(0, speed),
       etaSec: speed > 1024 && remaining > 0 ? remaining / speed : null,
-      determinate: total > 0
+      determinate: total > 0,
+      step,
+      steps
+    })
+  }
+
+  // Decode progress is counted in FRAMES, not bytes: reuse the smoothing for an ETA (remaining frames
+  // / frames-per-sec) but report bytesPerSec: 0 so the modal hides the MB/s readout (frames aren't MB).
+  function setTaskFrames(
+    file: string,
+    done: number,
+    total: number,
+    step?: number,
+    steps?: number
+  ): void {
+    const sampleKey = `decoding:${file}`
+    const now = performance.now()
+    const prev = taskSamples[sampleKey]
+    let speed = prev?.speed ?? 0 // frames/sec
+    if (prev && now > prev.t && done >= prev.bytes) {
+      const inst = (done - prev.bytes) / ((now - prev.t) / 1000)
+      speed = prev.speed > 0 ? prev.speed * 0.6 + inst * 0.4 : inst
+    }
+    taskSamples[sampleKey] = { bytes: done, t: now, speed }
+    const remaining = Math.max(0, total - done)
+    upsertTask(file, {
+      file,
+      stage: 'decoding',
+      progress: total > 0 ? Math.min(1, done / total) : 0,
+      bytesPerSec: 0,
+      etaSec: speed > 0 && remaining > 0 ? remaining / speed : null,
+      determinate: total > 0,
+      step,
+      steps
     })
   }
 
@@ -212,7 +258,11 @@ export const useWorkflowStore = defineStore('workflow', () => {
       setTaskBytes(p.file, 'copying', p.done ?? 0, p.total ?? 0)
     } else if (p.phase === 'indexing' && indexingFile && p.total) {
       // byte progress of the current file — moves its (pre-seeded) row from pending into indexing.
-      setTaskBytes(indexingFile, 'indexing', p.done ?? 0, p.total)
+      setTaskBytes(indexingFile, 'indexing', p.done ?? 0, p.total, p.step, p.steps)
+    } else if (p.phase === 'decoding' && indexingFile && p.total) {
+      // the ffmpeg decode pass of the current file (step 2/2), counted in frames — the formerly silent
+      // wait after the byte scan reached 100%.
+      setTaskFrames(indexingFile, p.done ?? 0, p.total, p.step, p.steps)
     } else if (p.phase === 'indexed' && p.file) {
       const key = matchCapture(p.file)?.file ?? p.file
       // count and complete only the fragments this run planned to index; a cached file that did no
@@ -279,8 +329,10 @@ export const useWorkflowStore = defineStore('workflow', () => {
         const text = formatProgress(pr)
         if (text) progress.value = text
         if (pr.phase === 'building' || pr.phase === 'verifying') {
-          buildProgress.value =
-            pr.phase === 'verifying' || !pr.total ? null : Math.min(1, (pr.done ?? 0) / pr.total)
+          // both verify passes (re-scan + decode) now carry done/total, so the bar is determinate
+          // throughout; only the brief pre-pass announcement (no total) falls back to indeterminate.
+          buildProgress.value = pr.total ? Math.min(1, (pr.done ?? 0) / pr.total) : null
+          buildLabel.value = buildPhaseLabel(pr)
         } else {
           updateCaptureProgress(pr)
           updateTasks(pr)
@@ -297,6 +349,16 @@ export const useWorkflowStore = defineStore('workflow', () => {
   function dispose(): void {
     unsubscribeProgress?.()
     unsubscribeProgress = null
+  }
+
+  // Headline for the export progress bar. 'building' is the byte concat; 'verifying' is the self-check,
+  // split into its 'scan' / 'decode' sub-steps with a "(step/steps)" counter (hidden when a lone pass).
+  function buildPhaseLabel(p: Progress): string {
+    if (p.phase === 'building') return t('build.building')
+    const counter = p.steps && p.steps > 1 ? ` (${p.step}/${p.steps})` : ''
+    if (p.sub === 'scan') return t('build.verifyScan') + counter
+    if (p.sub === 'decode') return t('build.verifyDecode') + counter
+    return t('build.verifying')
   }
 
   async function pickDir(): Promise<void> {
@@ -370,6 +432,7 @@ export const useWorkflowStore = defineStore('workflow', () => {
     busy.value = true
     building.value = true
     buildProgress.value = null
+    buildLabel.value = t('build.building')
     error.value = ''
     buildResult.value = null
     ingestMessage.value = ''
@@ -391,6 +454,7 @@ export const useWorkflowStore = defineStore('workflow', () => {
       busy.value = false
       building.value = false
       buildProgress.value = null
+      buildLabel.value = ''
       progress.value = ''
     }
   }
@@ -576,6 +640,7 @@ export const useWorkflowStore = defineStore('workflow', () => {
     busy,
     building,
     buildProgress,
+    buildLabel,
     buildResult,
     decodeSpots,
     selectedDamageKey,

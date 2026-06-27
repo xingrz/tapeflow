@@ -47,9 +47,26 @@ def _build_hdv(directory, files, output, notify):
     if notify:
         notify("progress", {"phase": "building"})
     hbuild.build(plan, output, on_progress=on_prog)
+    # The self-check is two full-file passes: a byte re-scan then (with ffmpeg) an ffmpeg decode. Both
+    # were silent — long dead air on a multi-GB master. Report each as a distinct "verifying" sub-step
+    # ("(1/2)" scan / "(2/2)" decode) so the export bar keeps moving instead of an opaque spinner.
+    vsteps = 2 if decode else 1
+
+    def on_verify_scan(done, total):
+        if notify:
+            notify("progress", {"phase": "verifying", "step": 1, "steps": vsteps,
+                                "sub": "scan", "done": done, "total": total})
+
+    def on_verify_decode(done, total):
+        if notify:
+            notify("progress", {"phase": "verifying", "step": 2, "steps": vsteps,
+                                "sub": "decode", "done": done, "total": total})
+
     if notify:
         notify("progress", {"phase": "verifying"})
-    ok, info = hverify.verify_build(output, plan, decode=decode)
+    ok, info = hverify.verify_build(output, plan, decode=decode,
+                                    on_scan_progress=on_verify_scan,
+                                    on_decode_progress=on_verify_decode)
     return {
         "output": output,
         "format": "hdv",

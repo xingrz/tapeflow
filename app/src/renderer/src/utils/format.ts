@@ -50,6 +50,7 @@ export function formatProgress(p: Progress): string {
   if (p.phase === 'index-plan') return '' // batch-total signal for the modal counter, no topbar text
   if (p.phase === 'index-start' && p.file) return t('progress.indexing', { file: p.file })
   if (p.phase === 'indexing') return ''
+  if (p.phase === 'decoding') return '' // per-file decode % drives the task modal, not the topbar
   if (p.phase === 'copying') return '' // per-file copy bytes drive the task modal, not the topbar
   if (p.phase === 'indexed' && p.file) {
     return p.cached

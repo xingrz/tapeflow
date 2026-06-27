@@ -59,7 +59,9 @@ export default {
     completedWarnings: '导出完成（含警告）',
     dismiss: '关闭',
     building: '正在构建合并文件…',
-    verifying: '正在校验合并文件…'
+    verifying: '正在校验合并文件…',
+    verifyScan: '校验中 · 扫描',
+    verifyDecode: '校验中 · 解码'
   },
   verify: {
     dvDone: 'DV 导出由 dvrescue 完成',
@@ -120,6 +122,7 @@ export default {
       pending: '排队中',
       copying: '复制中',
       indexing: '索引中',
+      decoding: '解码检查',
       merging: '合并中',
       done: '完成'
     }

@@ -241,7 +241,9 @@ thousands of GOPs/frames — SVG/DOM would choke; Canvas pans/zooms smoothly).
   → `BuildResult`. For HDV it carries a `verify` summary (AUX survived, CC/TEI integrity, decode) —
   surface it as a green check, or a warning when a knowingly-damaged merge is exported; DV has no
   separate self-check (`verify: null`). This is built as `BuildPanel.vue` — pick destination →
-  build with a real progress bar → surface the verify summary. The verify's **`decodeErrorSpots`**
+  build, then verify, **both with a determinate progress bar** (the verify is two full-file passes —
+  an output re-scan then an ffmpeg decode — each reporting `(step/steps)`, so the formerly-silent
+  self-check no longer reads as a hung spinner) → surface the verify summary. The verify's **`decodeErrorSpots`**
   (damage that only surfaces at final decode) are synthesised into the damage list as `kind: 'decode'`
   spots, so they get the same cards / map markers / accept-undo as analysis damage — and are persisted
   in `state.json` bound to the last export (the store re-merges them on each `analyze`, so they survive

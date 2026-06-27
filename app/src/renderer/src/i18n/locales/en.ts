@@ -59,7 +59,9 @@ export default {
     completedWarnings: 'Export completed with warnings',
     dismiss: 'Dismiss',
     building: 'Building merged file…',
-    verifying: 'Verifying merged file…'
+    verifying: 'Verifying merged file…',
+    verifyScan: 'Verifying · re-scan',
+    verifyDecode: 'Verifying · decode'
   },
   verify: {
     dvDone: 'DV export completed by dvrescue',
@@ -120,6 +122,7 @@ export default {
       pending: 'queued',
       copying: 'copying',
       indexing: 'indexing',
+      decoding: 'decoding',
       merging: 'merging',
       done: 'done'
     }

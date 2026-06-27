@@ -149,6 +149,12 @@ export interface Progress {
   files?: string[] // index-plan: the basenames this run will actually index (cached ones excluded)
   cached?: boolean
   tool?: string
+  // a phase that runs as several sequential full-file passes (index scan + decode; verify re-scan +
+  // decode) tags each pass so the UI can label it "(step/steps)"; steps === 1 means a lone pass (no
+  // ffmpeg) and the counter is hidden. `sub` names the verify sub-step (scan | decode).
+  step?: number
+  steps?: number
+  sub?: 'scan' | 'decode'
 }
 
 export interface WorkspaceCapture {

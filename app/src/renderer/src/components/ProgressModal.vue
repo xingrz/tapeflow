@@ -38,7 +38,10 @@ function isIndeterminate(task: TaskView): boolean {
               <span class="task-file" :title="task.file">
                 {{ task.stage === 'merging' ? $t('tasks.dvLabel') : task.file }}
               </span>
-              <span class="task-stage" :class="task.stage">{{ $t(`tasks.stage.${task.stage}`) }}</span>
+              <span class="task-stage" :class="task.stage">
+                {{ $t(`tasks.stage.${task.stage}`)
+                }}{{ task.steps && task.steps > 1 ? ` (${task.step}/${task.steps})` : '' }}
+              </span>
             </div>
             <div class="progress-track">
               <div
@@ -135,6 +138,7 @@ function isIndeterminate(task: TaskView): boolean {
   color: var(--accent, #5fb0ff);
 }
 .task-stage.indexing,
+.task-stage.decoding,
 .task-stage.merging {
   color: var(--warn, #e0a23a);
 }

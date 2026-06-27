@@ -170,10 +170,20 @@ def _analyze_hdv(directory, files, notify):
 
     cache_dir = os.path.join(directory, ".tapeflow", "hdvmerge")
     decode = hprobe.have_ffmpeg()
+    # Per file the work is a byte index scan and, when ffmpeg is present, an ffmpeg decode pass — two
+    # steps (just the scan without ffmpeg). Each reports its own (done,total) under a distinct phase so
+    # the UI shows "(1/2)" scanning then "(2/2)" decoding instead of stalling silently through decode.
+    steps = 2 if decode else 1
 
     def on_progress(done, total):
         if notify:
-            notify("progress", {"phase": "indexing", "done": done, "total": total})
+            notify("progress", {"phase": "indexing", "step": 1, "steps": steps,
+                                "done": done, "total": total})
+
+    def on_decode_progress(done, total):
+        if notify:
+            notify("progress", {"phase": "decoding", "step": 2, "steps": steps,
+                                "done": done, "total": total})
 
     def on_file(idx, cached=False, note=None, path=None):
         if notify:
@@ -198,7 +208,8 @@ def _analyze_hdv(directory, files, notify):
         if notify:
             notify("progress", {"phase": "index-start", "file": os.path.basename(path)})
         idx = hscan.ensure_index(path, decode=decode, cache_dir=cache_dir,
-                                 on_progress=on_progress, on_file=on_file)
+                                 on_progress=on_progress, on_file=on_file,
+                                 on_decode_progress=on_decode_progress)
         if idx is not None:
             sources.append(idx)
     chain, shifts, gaps = hscan.align(sources)

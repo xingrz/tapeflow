@@ -238,7 +238,7 @@ function clamp(value: number, min: number, max: number): number {
     <section v-if="workflow.building" class="build-progress" aria-label="Export progress">
       <Loader2 :size="18" class="spin" />
       <div class="build-progress-body">
-        <strong>{{ workflow.buildProgress == null ? $t('build.verifying') : $t('build.building') }}</strong>
+        <strong>{{ workflow.buildLabel || (workflow.buildProgress == null ? $t('build.verifying') : $t('build.building')) }}</strong>
         <div class="progress-track">
           <div
             class="progress-fill"
