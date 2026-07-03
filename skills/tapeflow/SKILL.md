@@ -7,7 +7,9 @@ description: >-
   re-capturing, or export the merged file. Also audits an already-exported master file on its own
   (read-only) — its completeness "TF tag" and any duplicate frames — to tag or re-check masters, e.g.
   on a NAS. Drives tapeflow's CLI over its hdvmerge/dvmerge engines, and can optionally drive the
-  tapecap CLI to re-capture the damaged spots over FireWire itself.
+  tapecap CLI to re-capture the damaged spots over FireWire itself. Also trigger on Chinese
+  phrasings: 检查磁带/带子采集是否完整、合并多次采集、补采（自动补采）损坏段、导出合并母带、
+  给母带打 TF 标签.
 metadata:
   internal: false
 ---
