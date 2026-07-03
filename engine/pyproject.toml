@@ -3,6 +3,10 @@ name = "tapeflow-engine"
 # Single source of truth: tapeflow_engine.__version__ (kept in lock-step with app/package.json).
 dynamic = ["version"]
 description = "tapeflow's Python sidecar: route DV/HDV captures to the merge engines and serve a unified JSON-RPC analysis over stdio"
+# 3.11 is the dev/sidecar baseline only. The portable CLI (.pyz) additionally promises to run on
+# any `python3` >= 3.7 (NAS/server use), so code staged into it — this package plus both engines —
+# must stay 3.7-syntax-compatible. CI's `cli` job enforces that with an ast check at pyz build
+# time; don't read this field as license for newer syntax.
 requires-python = ">=3.11"
 # The merge engines are provided as git submodules under ../engines and made importable either by
 # an editable install in dev (`pip install -e ../engines/hdvmerge ../engines/dvmerge`) or by being

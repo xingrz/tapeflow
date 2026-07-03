@@ -127,6 +127,20 @@ jobs:
           cp -r engines/dvmerge/src/dvmerge "$STAGE/"
           printf 'from tapeflow_engine.cli import main\nmain()\n' > "$STAGE/__main__.py"
           find "$STAGE" -name __pycache__ -type d -prune -exec rm -rf {} + || true
+          # Enforce the ">= 3.7" promise above: the pyprojects themselves declare 3.9/3.11, so
+          # nothing else stops newer syntax from slipping into the pyz and blowing up at run time
+          # on a NAS python (subcommands import lazily — `--version` passing proves nothing).
+          python - "$STAGE" <<'PYEOF'
+          import ast, pathlib, sys
+          bad = []
+          for p in sorted(pathlib.Path(sys.argv[1]).rglob("*.py")):
+              try:
+                  ast.parse(p.read_text(), feature_version=(3, 7))
+              except SyntaxError as e:
+                  bad.append("%s:%s: %s" % (p, e.lineno, e.msg))
+          if bad:
+              sys.exit("pyz payload uses Python-3.7-incompatible syntax:\n" + "\n".join(bad))
+          PYEOF
           python -m zipapp "$STAGE" -o "cli-dist/tapeflow-${VERSION}.pyz" -p "/usr/bin/env python3"
           python "cli-dist/tapeflow-${VERSION}.pyz" --version
           python "cli-dist/tapeflow-${VERSION}.pyz" --compact capabilities | head -c 200; echo
