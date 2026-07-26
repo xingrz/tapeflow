@@ -4,14 +4,14 @@ description: >-
   Rescue a worn DV or HDV camcorder tape from several overlapping captures by merging the clean
   parts into one complete video. Use when given a folder of repeated tape captures (.dv or .m2t/.ts)
   and asked to check whether they add up to a complete recording, find which spots still need
-  re-capturing, or export the merged file. Also audits an already-exported master file on its own
-  (read-only) — its completeness "TF tag" and any duplicate frames — to tag or re-check masters, e.g.
-  on a NAS. Drives tapeflow's CLI over its hdvmerge/dvmerge engines, and can optionally drive the
-  tapecap CLI to re-capture the damaged spots over FireWire itself. Also trigger on Chinese
-  phrasings: 检查磁带/带子采集是否完整、合并多次采集、补采（自动补采）损坏段、导出合并母带、
+  re-capturing, partition an explicitly multi-event or mixed DV/HDV tape into event working sets
+  (including exact byte cuts at HDV timecode resets), or export the merged file. Also audits an
+  already-exported master file on its own (read-only) — its completeness "TF tag" and any duplicate
+  frames — to tag or re-check masters, e.g. on a NAS. Drives tapeflow's CLI over its hdvmerge/dvmerge
+  engines, and can optionally drive the tapecap CLI to re-capture the damaged spots over FireWire
+  itself. Also trigger on Chinese phrasings: 检查磁带/带子采集是否完整、合并多次采集、
+  多事件磁带分段/按日期切割、DV/HDV 混合磁带、补采（自动补采）损坏段、导出合并母带、
   给母带打 TF 标签.
-metadata:
-  internal: false
 ---
 
 # tapeflow — merge overlapping DV/HDV tape captures
@@ -29,62 +29,33 @@ dvrescue's merge), and `analyze` is a faithful, normalised view of those engines
 result is identical to running the engines directly — you just get one unified schema and one verdict
 instead of two engine-specific reports.
 
-## Hand over everything — don't judge, don't curate
+## Give each event every usable capture
 
-The whole method rests on one idea: you give tapeflow **every** capture of the tape — each pass,
-re-capture and 补采 fragment, however broken — in one directory, and the engines pick the clean frames
-per tape position across all of them (matched by *content*, not by filename or date). Two ways an
-agent goes wrong here, both to avoid:
+A working directory is one intended event and one format (or the whole tape
+when the user wants one event). After event partitioning, put **every** pass,
+re-capture and 补采 fragment assigned to that event into its real working
+directory, however damaged. Never curate by apparent quality: a bad-looking
+file may hold the only clean copy of a frame, and choosing per-position winners
+is the engine's job.
 
-- **Don't pre-judge which material is good.** Never rank, skip, or discard a capture because it "looks
-  corrupt", and don't try to single out the good frames or files yourself — a mostly-broken pass often
-  holds the one clean copy of a frame no other pass caught. Deciding good-vs-bad per position *is* the
-  engines' job, and it comes back to you as `analyze`'s verdict.
-- **Don't feed a hand-picked subset.** Don't stage a curated selection with symlinks, copies, or a
-  temp dir. Drop all captures into the real working dir and point `analyze`/`build` at that dir — they
-  read every matching file in it and stay fast via the `.tapeflow/` cache. A partial set throws away
-  the redundancy the merge depends on.
-
-Your job is to run `analyze` and act on what it reports — not to curate its inputs.
-
-## When to use
-
-- You have a directory of **repeated captures of one tape** — several `.dv` files, or several
-  `.m2t`/`.m2ts`/`.mts`/`.ts` files (one tape is one format; never mix).
-- The task is: "are these captures complete?", "which parts still need re-capturing?", or "merge
-  these into one file".
+Keep an HDV capture that crosses a backwards/reset timecode boundary in staging
+until its event fragments have been derived. Ordinary roughly 3-second event
+overlap is intentionally approximate and needs no post-cut.
 
 ## Setup
 
 ### Finding the CLI
 
-The skill carries the workflow, not the binary — so first locate a `tapeflow` CLI to run, trying
-these in order and using the first that works. (Wherever the rest of this doc writes `tapeflow <cmd>`,
-substitute whichever invocation you found.)
+The skill carries the workflow, not the binary. Try these in order and use the
+first successful invocation wherever this document says `tapeflow`:
 
-1. **On PATH** — try `tapeflow capabilities`. If it runs, the package is pip-installed; use
-   `tapeflow <cmd>` directly.
-2. **A tapeflow checkout** — if the working tree has `engine/src/tapeflow_engine/`, run `git submodule
-   update --init` once (pulls the hdvmerge/dvmerge engines), then use
-   `PYTHONPATH=engine/src python -m tapeflow_engine.cli <cmd>`. No install needed — a bootstrap shim
-   puts the engine submodules on the import path.
-3. **An installed TapeFlow app** — the desktop app bundles the CLI as a standalone `tapeflow-cli`
-   binary, alongside its engine. Run it directly with the same subcommands:
-   - **macOS** — `/Applications/TapeFlow.app/Contents/Resources/tapeflow-cli/tapeflow-cli`
-   - **Windows** — `<install dir>\resources\tapeflow-cli\tapeflow-cli.exe` (default
-     `%LOCALAPPDATA%\Programs\TapeFlow\…`)
-   - **Linux** (AppImage) — extract once with `./TapeFlow*.AppImage --appimage-extract`, then
-     `squashfs-root/resources/tapeflow-cli/tapeflow-cli`
-
-   (An app built before this CLI shipped won't have `tapeflow-cli` — if the file isn't there, fall
-   through.)
-4. **A portable `tapeflow-*.pyz`** — a single-file zipapp (downloaded from the
-   [Releases](https://github.com/xingrz/tapeflow/releases) page, or built locally). Run it with any
-   `python3` (≥ 3.7): `python3 tapeflow-<version>.pyz <cmd>`. No install, no CPU-arch or glibc concerns —
-   the right fit on a NAS or server that already has Python (e.g. to `verify` masters in place).
-5. **None found** — don't guess or auto-install. Tell the user to install TapeFlow (`brew install
-   --cask xingrz/tap/tapeflow`, or a build from the [Releases](https://github.com/xingrz/tapeflow/releases)
-   page) or the `tapeflow` CLI, then retry.
+1. `tapeflow capabilities` (an installed CLI on PATH).
+2. From a checkout, run `git submodule update --init` once, then use
+   `PYTHONPATH=engine/src python -m tapeflow_engine.cli`.
+3. Use the `tapeflow-cli` bundled under an installed TapeFlow app's resources,
+   or `python3 tapeflow-<version>.pyz` for a portable release (Python ≥ 3.7).
+4. If none exists, do not guess or auto-install. Ask the user to install
+   TapeFlow/its CLI, then retry.
 
 Confirm with `capabilities` before going further — it reports engine imports and ffmpeg/dvrescue
 presence and versions, and never fails on absence. External binaries on PATH: **dvrescue** is required
@@ -105,16 +76,59 @@ Each command prints one JSON document to **stdout**; progress streams to **stder
 Exit code is `0` on success, `2` on a user error (bad dir, mixed formats, missing dvrescue) with a
 clean `error: …` line on stderr — not a traceback.
 
+## Preparing an explicitly multi-event tape
+
+Use event handling only when the user identifies multiple events, asks for
+separate masters, or asks you to discover them. Otherwise treat the reel as one
+event. For discovery, follow tapecap's sparse-probe workflow; never take a full
+pass only to map the contents.
+
+Choose one of these mutually exclusive cases:
+
+- **Ordinary same-format boundary:** capture each event directly, using a
+  sustained recording-date change as the approximate boundary. Start about 3
+  seconds early and let capture run about 3 seconds into the next event; no
+  exact positioning or post-cut is required. Adjacent event files therefore
+  share about 6 seconds.
+- **HDV timecode goes backwards or resets:** final fragments must meet without
+  overlap. Because the deck cannot land on the reset frame, capture across it
+  into staging—whether this is a full source or a small re-capture—then run
+  `tapeflow analyze <staging-dir>` to create
+  `.tapeflow/hdvmerge/<capture>.idx.jsonl`; find the first GOP of the later
+  event and use its `off` as the shared half-open cut (`earlier[..off)`,
+  `later[off..]`). Copy bytes verbatim, never remux, and verify the output sizes
+  account for the selected source range exactly. If a gap hid the reset, capture
+  one new window spanning both events and distribute the two derived sides to
+  their event dirs. Preserve the original.
+- **DV timecode drops out, resets, or oscillates with zero:** ignore it. LP and
+  imperfect DV can do this repeatedly and DV playback tolerates it; partition
+  only on sustained recording-date changes with the ordinary direct-capture
+  overlap.
+- **DV/HDV format change:** one invocation cannot capture both. Use tapecap's
+  forced-format boundary procedure to create separate `.dv` and `.m2t`
+  captures, then place them in separate event directories.
+
+Treat a brief different-date insert (typically under a minute) between two
+substantial events as part of the nearer/contextually related event unless the
+user says otherwise. Never omit it.
+
 ## Workflow
 
 1. **Analyse.** `tapeflow analyze <dir>` → `tapeflow.analysis/1`. The first run indexes every capture
-   (slow, GB files); re-runs are cached and fast.
+   (slow, GB files); re-runs are cached and fast. **After the first capture pass, always stop here and
+   read this report before deciding how to capture again.** A large tapecap continuity/drop count is
+   not a reason to start another full-reel pass: only this report shows which errors survived and
+   which spans actually need more material.
 2. **Read the verdict** from the JSON (see fields below). If `complete` is `true`, go to step 4.
    Otherwise report the re-capture list: for each `damage[]` entry give the operator the **`tcStart`**
    (the deck cue point), the `kind`, and the `coverage`.
-3. **Re-capture and re-analyse.** New captures get dropped into the same dir; re-run `analyze`. Only
-   the new file is indexed. The damage list shrinks each round. To drive the deck and fill the gaps
-   automatically, see **Automatic re-capture with tapecap** below.
+3. **Re-capture and re-analyse.** Add an ordinary new capture to the same dir
+   and re-run `analyze`; only that file is indexed. For an HDV reset boundary,
+   stage and split the cross-boundary capture first, then add each derived side
+   to its event dir and analyse every affected dir. Prefer report-directed
+   targets. Make another full pass only when the report shows targeted capture
+   is impractical or the user explicitly requests one. For automation, see
+   below.
 4. **Build — name it after the tape, write it outside the captures dir.** When `buildable` is `true`,
    `tapeflow build <dir> <output>` writes the merged file. Two rules for `<output>`:
    - **Name** it after the working directory itself with the completeness tag appended, matching what
@@ -255,77 +269,48 @@ merge, so its tag matches `analyze` exactly.
 
 ## Automatic re-capture with tapecap (optional)
 
-`analyze` only *finds* the gaps — filling them means replaying the tape. If the user asks to
-**re-capture the damaged spots automatically** (自动补采), you can drive the deck yourself, but only
-when both of these are present:
+Drive the deck only when the tapecap CLI sees it **and** the tapecap skill is
+available. Otherwise report the targets for manual capture. Follow that skill
+for every transport command; the rules here only orchestrate tapeflow results.
 
-- the **`tapecap`** CLI is installed and sees the deck, and
-- the **tapecap skill** is installed in this agent.
+A target is one `damage[]` spot, one `verify.decode_error_spots[]` item, or
+nearby spots batched under rule 4. Use this loop:
 
-If either is missing, **don't improvise a capture** — report the damage list (Workflow step 2) and
-let the operator capture manually. When both are present, **follow the tapecap skill for every
-capture, seek and transport command**; the steps below are only the orchestration tapeflow adds on
-top, with `analyze`'s `damage[]`/`tape` timecodes as the targets. Each pass writes a *new* file into
-`<dir>`; re-run `analyze` after every pass (only the new file is indexed, so it's fast).
-
-The same loop also clears a build's **`verify.decode_error_spots`** (`residual`/`stitch`) — capture each
-spot's `tc` the same way (wider than the point), but verify by **re-building** and re-checking
-`decode_error_spots`, not by `analyze` (these only show at decode). Same 3-attempt cap; an `unexplained`
-spot that doesn't clear in one pass, leave it.
-
-1. **Work one target loop at a time.** A **target** is one capture aim — a single `damage[]` spot, or
-   a small group of tightly adjacent spots merged into one window (see the 2-minute hard cap below).
-   Pick the earliest outstanding target, capture it once, then immediately re-run `tapeflow analyze
-   <dir>` before moving on. Do **not** capture the full A/B/C/D queue before re-analysis: the damage
-   list is live state, and each new fragment can change, shrink, merge, or eliminate later targets.
-2. **Capture wider than the gap.** A `damage[]` entry's `tcStart`/`tcEnd` are the *damaged* bounds,
-   not the capture bounds — aim the window a margin outside them on both sides so the new fragment
-   comfortably overlaps the neighbouring good material the merge needs to stitch it in.
-3. **At the head and tail, the capture must reach the physical edge — at least twice.** `analyze`'s
-   `tape` span and `complete` verdict are *reconstructed from the captures*: the analysis can't see
-   anything earlier than the earliest captured frame or later than the latest, so it will never flag
-   head/tail content that **no** capture reached — and step 2's margin has no tape to sit in once a
-   target touches the edge. So a target at or near the **start** must be captured starting from the
-   physical beginning of the tape, and one at or near the **end** must run to the physical end; follow
-   the tapecap skill for how to reach those edges. Because the oracle can't cross-check the edges, give
-   each edge that needs work **at least two independent passes**, re-analysing after each, even if the
-   first looks clean.
-4. **Only batch truly nearby neighbours.** You may group adjacent spots into one capture window — that
-   group then counts as a single target — only when the clean gap between the end of one spot and the
-   start of the next is **2 minutes or less**: rolling the deck across a short good stretch is cheaper
-   than the stop-and-re-seek a separate target costs, and every re-seek wears the transport. Treat 2
-   minutes as a **hard maximum**, not a suggestion: if two spots are 2:01 apart, or if the gap cannot
-   be computed confidently from `tcStart`/`tcEnd`, do not batch them. A 9-minute gap is always a
-   separate target.
-5. **Re-analyse, then retry the same target up to 3×.** After every completed capture file, re-run
-   `analyze`. Do not use tapecap's reported error counts, dropped frames, decode errors, or capture
-   quality summary to decide whether the attempt succeeded; those are transport telemetry only. The
-   only repair oracle is the fresh `tapeflow.analysis/1` `damage[]` list after the new file is in the
-   working dir. If the target you just covered is still present (by TC overlap, not by `id`), rewind
-   and re-capture that same target — capped at **3 attempts**. A target that hasn't improved in 3 tries
-   won't this round; mark it skipped and move on so you don't grind the transport on one place.
-6. **Global cleanup pass (up to twice).** Once you've been down the whole tape, go back to the targets
-   skipped after 3 tries and try them again, same **3-strikes-then-skip** rule per target. Repeat this
-   whole-tape cleanup at most **twice**.
-7. **Stress-release, then a final attempt.** If two cleanup passes still leave targets failing, run
-   the tape end to end once across its **full physical length** (not merely the captured
-   `tcStart`→`tcEnd` span) — see the tapecap skill for the transport — to relieve its tension, then
-   give each still-failing target **2 more tries**.
-8. **Stop and ask.** If any still fail after that, **stop** — don't keep cycling the deck on a spot
-   the tape can't give up. Report what's left (each spot's `tc`, `kind` and `coverage`/`copies`) and
-   ask the user whether to `build` the merged file as it stands (`buildable` is usually still `true`)
-   or leave it for a manual attempt.
+1. **Work one target at a time.** Capture it, ingest it, then immediately
+   re-analyse before choosing the next target; the list is live state. For a
+   target at an HDV reset boundary, stage the wide capture, split it, ingest
+   both sides as applicable, and analyse every affected event directory.
+2. **Capture wider than the reported damage.** `tcStart`/`tcEnd` describe the
+   defect, not the capture bounds. Include good material on both sides. If the
+   window crosses an HDV reset boundary, apply the exact-split rule above rather
+   than trying to steer around it.
+3. **Cover physical edges twice.** Analysis cannot detect content earlier than
+   every capture's start or later than every capture's end. Capture a head target
+   from the physical beginning and a tail target through the physical end, with
+   at least two independent passes for each affected edge.
+4. **Batch only close neighbours.** Combine spots only when the known clean gap
+   is at most 2 minutes. If it is 2:01 or cannot be computed confidently, keep
+   separate targets.
+5. **Use tapeflow as the repair oracle.** Ignore tapecap transport telemetry when
+   judging success. Retry a still-overlapping target up to 3 times, then skip it
+   for this round. For a decode-error target, rebuild and inspect
+   `decode_error_spots` instead of relying on `analyze`; leave an `unexplained`
+   spot after one failed re-capture.
+6. **Run at most two cleanup rounds** over skipped targets, retaining the
+   3-attempt cap. If failures remain, run the tape once across its full physical
+   length to release tension, then give each remaining target 2 final tries.
+7. **Stop and ask** if anything remains. Report each spot's `tc`, `kind`, and
+   coverage/copies; ask whether to build the current result or leave it for a
+   manual attempt.
 
 Sources stay read-only throughout: each re-capture is an additive archival fragment, never an
 overwrite — it only gives the merge more material to pick the clean frames from.
 
 ## Guardrails
 
-- **Give it everything; don't curate.** Hand over all captures and let `analyze` judge — never
-  pre-screen files by eye or feed a hand-picked subset (see *Hand over everything* above). This is the
-  rule agents break most.
-- **One tape = one format.** A dir mixing `.m2t` and `.dv` is a user error the CLI rejects — surface
-  it, don't try to merge across formats.
+- **One working dir = one intended event = one format** (or the whole tape when deliberately treated
+  as one event). A dir mixing `.m2t` and `.dv` is a user error the CLI rejects — surface it, don't try
+  to merge across formats.
 - **Keep the build output out of the captures dir.** The merge is a `.m2t`/`.dv` file; left in `<dir>`
   it becomes a phantom capture on the next `analyze`. Write it to a subdir or a sibling/parent
   (Workflow step 4).

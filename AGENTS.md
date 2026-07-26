@@ -15,8 +15,10 @@ the UI to the `tapeflow.analysis/1` contract, not to anything engine-specific.
 The workflow it serves: a dirty tape doesn't read cleanly in one pass, so you capture it several
 times (rewind, retry), ending with several overlapping files that each carry some damage. tapeflow:
 
-1. You pick a **working directory** = the captures of **one tape** (one format — a physical tape is
-   either DV or HDV, never both).
+1. You pick a **working directory** = the captures of **one intended event in
+   one format**. Most tapes are treated as one event. A physical tape may switch
+   between separate DV and HDV events; partition those into different working
+   directories before analysis.
 2. Click **Analyse**. It indexes the captures, works out how they align, and reports whether they
    merge into a complete video — listing every damaged spot that still needs a re-capture, each
    cued by the tape's **SMPTE timecode** (to find it on the deck) and the camera's **wall-clock
@@ -344,8 +346,9 @@ It is a polyglot monorepo, but needs no monorepo tool — `app/` has its own `pa
   into an engine, or `residual`/`mosaic` vocabulary into the renderer.
 - **Sources are read-only.** tapeflow never modifies a user's capture files. Writes go to the merged
   output (on export), engine caches, and `.tapeflow/state.json`.
-- **The working dir = one tape = one format.** Detect format by extension; if a dir mixes `.m2t` and
-  `.dv`, that's a user error to surface, not something to merge.
+- **The working dir = one intended event = one format.** A physical tape may
+  contain separate DV and HDV events, but a working dir may not mix `.m2t` and
+  `.dv`; surface that as a user error.
 - **First analysis is slow, re-analysis is fast.** Indexing (the expensive step) is cached per file;
   dropping in one new capture only indexes that file. Make this latency difference visible (progress
   for the slow first pass) so users don't think a fast re-run "didn't work".
@@ -353,6 +356,14 @@ It is a polyglot monorepo, but needs no monorepo tool — `app/` has its own `pa
   report via `progress` notifications.
 - **The schema is the contract.** Changing `tapeflow.analysis/1` is a breaking change across the
   sidecar/renderer boundary — version it (`/2`) rather than silently reshaping it.
+
+## Commit conventions
+
+- Hard-wrap every non-blank commit-message line at 75 characters or fewer,
+  including the subject, body, and trailers. Rewrite an overlong subject rather
+  than splitting it.
+- End commits with a co-author trailer naming the AI model, and never include a
+  session URL.
 
 ## Status
 
